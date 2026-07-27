@@ -1,6 +1,8 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatRelativeTime } from "@/lib/utils";
+import type { ProfileRole } from "@/lib/types";
+import { AdminRoleSelect } from "@/components/admin/AdminRoleSelect";
 
 export interface AdminUserRow {
   user_id: string;
@@ -15,6 +17,8 @@ export interface AdminUserRow {
   failed_generations: number;
   total_cost_usd: number;
   last_generation_at: string | null;
+  username: string | null;
+  role: ProfileRole | null;
 }
 
 export function UserTable({ users }: { users: AdminUserRow[] }) {
@@ -24,6 +28,7 @@ export function UserTable({ users }: { users: AdminUserRow[] }) {
         <thead>
           <tr className="border-b border-border-subtle text-left text-xs text-muted">
             <th className="px-4 py-3 font-medium">User</th>
+            <th className="px-4 py-3 font-medium">Role</th>
             <th className="px-4 py-3 font-medium">Joined</th>
             <th className="px-4 py-3 font-medium text-right">Image</th>
             <th className="px-4 py-3 font-medium text-right">Video</th>
@@ -42,7 +47,10 @@ export function UserTable({ users }: { users: AdminUserRow[] }) {
                   <span className="font-medium">{u.display_name || u.email}</span>
                   {u.is_admin && <Badge>admin</Badge>}
                 </div>
-                <div className="text-xs text-muted">{u.email}</div>
+                <div className="text-xs text-muted">{u.email}{u.username ? ` · @${u.username}` : ""}</div>
+              </td>
+              <td className="px-4 py-3">
+                <AdminRoleSelect userId={u.user_id} initialRole={u.role} />
               </td>
               <td className="px-4 py-3 text-muted">{formatRelativeTime(u.joined_at)}</td>
               <td className="px-4 py-3 text-right">{u.image_generations}</td>

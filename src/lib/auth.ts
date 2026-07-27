@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import type { ProfileRole } from "@/lib/types";
 
 export interface CurrentUser {
   id: string;
@@ -7,6 +8,9 @@ export interface CurrentUser {
   displayName: string | null;
   avatarUrl: string | null;
   isAdmin: boolean;
+  username: string | null;
+  bio: string | null;
+  role: ProfileRole | null;
 }
 
 /**
@@ -27,7 +31,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, display_name, avatar_url, is_admin")
+    .select("email, display_name, avatar_url, is_admin, username, bio, role")
     .eq("id", user.id)
     .single();
 
@@ -37,6 +41,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     displayName: profile?.display_name ?? null,
     avatarUrl: profile?.avatar_url ?? null,
     isAdmin: profile?.is_admin ?? false,
+    username: profile?.username ?? null,
+    bio: profile?.bio ?? null,
+    role: (profile?.role as ProfileRole | null) ?? null,
   };
 });
 
@@ -77,7 +84,7 @@ export async function getCurrentUserForLayout(): Promise<CurrentUser | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("email, display_name, avatar_url, is_admin")
+    .select("email, display_name, avatar_url, is_admin, username, bio, role")
     .eq("id", user.id)
     .single();
 
@@ -87,5 +94,8 @@ export async function getCurrentUserForLayout(): Promise<CurrentUser | null> {
     displayName: profile?.display_name ?? null,
     avatarUrl: profile?.avatar_url ?? null,
     isAdmin: profile?.is_admin ?? false,
+    username: profile?.username ?? null,
+    bio: profile?.bio ?? null,
+    role: (profile?.role as ProfileRole | null) ?? null,
   };
 }

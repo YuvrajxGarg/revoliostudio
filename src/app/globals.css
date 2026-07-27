@@ -126,10 +126,6 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
-  html.theme-transition,
-  html.theme-transition * {
-    transition: none !important;
-  }
 }
 
 /* Magnific-style micro label used for panel sections (MODEL, REFERENCES,
@@ -404,16 +400,6 @@ input[type="range"].slider-thin::-moz-range-thumb {
 }
 .animate-backdrop-in {
   animation: backdrop-in 0.15s ease-out both;
-}
-
-/* Applied to <html> for a brief window around a theme toggle so the swap
-   crossfades instead of snapping instantly — scoped narrowly to color-
-   related properties, and only while this class is present (removed ~200ms
-   after toggling in ThemeToggle.tsx), so it never fights with any other
-   element's own transition the rest of the time. */
-html.theme-transition,
-html.theme-transition * {
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, fill 0.2s ease, stroke 0.2s ease !important;
 }
 
 /* Sun/Moon icon swap on the theme toggle — a quick pop instead of an

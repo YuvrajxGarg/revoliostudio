@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -76,9 +77,17 @@ export function UserMenu({
             <div className="text-sm font-medium truncate">{displayName || "Revolio user"}</div>
             <div className="text-xs text-muted truncate">{email}</div>
           </div>
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 transition-colors"
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </Link>
           <button
             onClick={signOut}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 transition-colors"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 transition-colors border-t border-border-subtle"
           >
             <LogOut className="h-4 w-4" />
             Sign out

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { ArrowLeftRight, Brush, Check, Download, Eye, FolderPlus, Layers, AlertTriangle, Loader2, Maximize2, Music2, RefreshCw, Star, Trash2, MonitorPlay } from "lucide-react";
 import type { Generation } from "@/lib/types";
 import { useComposerStore } from "@/store/composerStore";
@@ -476,6 +477,29 @@ export function GenerationCard({
               </span>
             )}
           </div>
+        )}
+
+        {generation.author && (
+          // Persistent (not hover-only) — only ever populated for the
+          // Community feed / public profile pages (both readOnly), where
+          // the select-checkbox below never renders, so this corner is
+          // otherwise unused. Top-left, not bottom-left, deliberately: the
+          // hover toolbar further down already owns the bottom band.
+          <Link
+            href={generation.author.username ? `/u/${generation.author.username}` : "#"}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-sm px-2 py-1 hover:bg-black/80 transition-colors"
+          >
+            {generation.author.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={generation.author.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
+            ) : (
+              <div className="h-4 w-4 rounded-full accent-gradient" />
+            )}
+            <span className="text-[11px] font-medium text-white/90 truncate max-w-[100px]">
+              {generation.author.display_name || generation.author.username}
+            </span>
+          </Link>
         )}
 
         {!readOnly && onToggleSelect && generation.status === "completed" && (

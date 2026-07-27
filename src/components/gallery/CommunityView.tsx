@@ -25,28 +25,40 @@ const TABS: { id: Category | "all"; label: string }[] = [
  */
 export function CommunityView() {
   const [tab, setTab] = useState<Category | "all">("all");
-  const [colWidth, setColWidth] = usePersistentState("revolio-grid-width", 220);
+  // Own key (distinct from Gallery's "revolio-grid-width") so Community's
+  // default thumbnail scale doesn't fight with the Gallery page's slider.
+  const [colWidth, setColWidth] = usePersistentState("revolio-community-grid-width", 260);
   const category = tab === "all" ? undefined : tab;
   const { items, loading, hasMore, loadMore, removeItem } = useCommunityGenerations(category);
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-6xl px-4 md:px-6 py-6 flex flex-col gap-4">
-        <div className="flex items-center gap-2">
-          <Globe className="h-5 w-5 text-accent" />
-          <h1 className="text-lg font-semibold">Community</h1>
-          <span className="text-xs text-muted">Generations the community chose to share</span>
+      <div className="mx-auto max-w-6xl px-4 md:px-6 py-6 flex flex-col gap-5">
+        <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-surface p-6 md:p-8">
+          <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-accent/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+              <Globe className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Community</h1>
+              <p className="mt-0.5 text-sm text-muted max-w-md">
+                Generations the community chose to share — publish your own from any generation&apos;s detail panel.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-1 rounded-xl border border-border-subtle bg-surface p-1 w-fit">
+          <div className="flex items-center gap-1 rounded-full border border-border-subtle bg-surface p-1 w-fit">
             {TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                  tab === t.id ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
+                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                  tab === t.id ? "bg-accent text-white" : "text-muted hover:text-foreground"
                 )}
               >
                 {t.label}

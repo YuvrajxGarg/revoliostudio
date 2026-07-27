@@ -8,6 +8,33 @@ import type { Generation } from "@/lib/types";
 const PAGE_SIZE = 24;
 const POLL_INTERVAL_MS = 1500;
 
+// Module-level cache: every studio page fully unmounts on navigation (each
+// is a separate route leaf), so this hook used to reset to `loading: true`
+// and refetch from scratch every time you switched pages — the "loader
+// then previews pop in" flash when going e.g. Image -> Video -> Image.
+// Keying the last-fetched page of results by category+filters here (outside
+// React state, so it survives the unmount) lets a returning page paint
+// last-known results immediately while it revalidates in the background.
+// Session-lifetime only — cleared on a full page reload, which is fine
+// since a fresh load has nothing stale to show anyway.
+const galleryCache = new Map<string, Generation[]>();
+
+function cacheKey(category: Category | undefined, filters: GenerationFilters | undefined) {
+  return JSON.stringify([
+    category ?? null,
+    filters?.projectId ?? null,
+    filters?.search ?? "",
+    filters?.modelIds?.join(",") ?? "",
+    filters?.toolId === undefined ? "u" : filters.toolId,
+    !!filters?.favoritesOnly,
+    !!filters?.trashed,
+    !!filters?.allowTeamMembers,
+    filters?.createdAfter ?? "",
+    filters?.createdBefore ?? "",
+    filters?.aspectRatio ?? "",
+  ]);
+}
+
 export interface GenerationFilters {
   /** Only rows tagged with this project. `null`/undefined = no filter. */
   projectId?: string | null;
@@ -52,12 +79,18 @@ export interface GenerationFilters {
 }
 
 export function useGenerations(category?: Category, filters?: GenerationFilters) {
-  const [items, setItems] = useState<Generation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const key = cacheKey(category, filters);
+  const [items, setItems] = useState<Generation[]>(() => galleryCache.get(key) ?? []);
+  const [loading, setLoading] = useState(() => !galleryCache.has(key));
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(0);
   const itemsRef = useRef<Generation[]>([]);
   itemsRef.current = items;
+  // Only the very first effect run should trust the lazy `useState` init
+  // above (it already read the cache) — later reruns, triggered by the
+  // category/filters actually changing while this instance stays mounted,
+  // need to re-check the cache for the *new* key themselves.
+  const firstRunRef = useRef(true);
   // Admin accounts can *see* every user's rows via RLS (for the Admin panel),
   // but this hook powers each person's own Studio/Gallery — so we always
   // scope explicitly to the signed-in user rather than relying on RLS alone.
@@ -154,18 +187,26 @@ export function useGenerations(category?: Category, filters?: GenerationFilters)
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+    } else {
+      const cached = galleryCache.get(key);
+      setItems(cached ?? []);
+      setLoading(!cached);
+    }
     pageRef.current = 0;
     fetchPage(0).then((data) => {
       if (cancelled) return;
       setItems(data);
       setHasMore(data.length === PAGE_SIZE);
       setLoading(false);
+      galleryCache.set(key, data);
     });
     return () => {
       cancelled = true;
     };
-  }, [fetchPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchPage, key]);
 
   const loadMore = useCallback(async () => {
     const next = pageRef.current + 1;
@@ -175,24 +216,49 @@ export function useGenerations(category?: Category, filters?: GenerationFilters)
     setHasMore(data.length === PAGE_SIZE);
   }, [fetchPage]);
 
-  const prepend = useCallback((item: Generation) => {
-    setItems((prev) => [item, ...prev.filter((p) => p.id !== item.id)]);
-  }, []);
+  // These three also write through to the module cache (keeping it fresh,
+  // not just seeding it on fetch) so a quick nav-away-and-back doesn't
+  // briefly resurrect a just-deleted item or hide a just-submitted one
+  // before the background revalidation fetch lands.
+  const prepend = useCallback(
+    (item: Generation) => {
+      setItems((prev) => {
+        const next = [item, ...prev.filter((p) => p.id !== item.id)];
+        galleryCache.set(key, next);
+        return next;
+      });
+    },
+    [key]
+  );
 
-  const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  const removeItem = useCallback(
+    (id: string) => {
+      setItems((prev) => {
+        const next = prev.filter((p) => p.id !== id);
+        galleryCache.set(key, next);
+        return next;
+      });
+    },
+    [key]
+  );
 
-  const pollOne = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/jobs/${id}`);
-      if (!res.ok) return;
-      const updated = (await res.json()) as Generation;
-      setItems((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
-    } catch {
-      // ignore transient errors, next tick will retry
-    }
-  }, []);
+  const pollOne = useCallback(
+    async (id: string) => {
+      try {
+        const res = await fetch(`/api/jobs/${id}`);
+        if (!res.ok) return;
+        const updated = (await res.json()) as Generation;
+        setItems((prev) => {
+          const next = prev.map((g) => (g.id === updated.id ? updated : g));
+          galleryCache.set(key, next);
+          return next;
+        });
+      } catch {
+        // ignore transient errors, next tick will retry
+      }
+    },
+    [key]
+  );
 
   // Poll any in-flight generations for status updates.
   useEffect(() => {

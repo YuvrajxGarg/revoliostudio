@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Category } from "@/lib/models";
-import type { Generation } from "@/lib/types";
+import type { Generation, PublicProfile } from "@/lib/types";
 
 const PAGE_SIZE = 24;
 
@@ -18,6 +18,19 @@ export function useCommunityGenerations(category?: Category) {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(0);
+  // Accumulates across pages so the same author's profile is only ever
+  // fetched once per session, not once per page it happens to appear on.
+  const authorsRef = useRef<Map<string, PublicProfile>>(new Map());
+
+  const attachAuthors = useCallback(async (rows: Generation[]) => {
+    const missing = [...new Set(rows.map((r) => r.user_id))].filter((id) => !authorsRef.current.has(id));
+    if (missing.length > 0) {
+      const supabase = createClient();
+      const { data } = await supabase.rpc("get_public_profiles", { p_user_ids: missing });
+      for (const p of (data ?? []) as PublicProfile[]) authorsRef.current.set(p.id, p);
+    }
+    return rows.map((r) => ({ ...r, author: authorsRef.current.get(r.user_id) ?? null }));
+  }, []);
 
   const fetchPage = useCallback(
     async (page: number) => {
@@ -41,24 +54,26 @@ export function useCommunityGenerations(category?: Category) {
     let cancelled = false;
     setLoading(true);
     pageRef.current = 0;
-    fetchPage(0).then((rows) => {
-      if (cancelled) return;
-      setItems(rows);
-      setHasMore(rows.length === PAGE_SIZE);
-      setLoading(false);
-    });
+    fetchPage(0)
+      .then(attachAuthors)
+      .then((rows) => {
+        if (cancelled) return;
+        setItems(rows);
+        setHasMore(rows.length === PAGE_SIZE);
+        setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [fetchPage]);
+  }, [fetchPage, attachAuthors]);
 
   const loadMore = useCallback(async () => {
     const next = pageRef.current + 1;
-    const rows = await fetchPage(next);
+    const rows = await fetchPage(next).then(attachAuthors);
     pageRef.current = next;
     setItems((prev) => [...prev, ...rows]);
     setHasMore(rows.length === PAGE_SIZE);
-  }, [fetchPage]);
+  }, [fetchPage, attachAuthors]);
 
   const removeItem = useCallback((id: string) => setItems((prev) => prev.filter((g) => g.id !== id)), []);
 

@@ -21,6 +21,7 @@ import { ProjectsCard } from "@/components/projects/ProjectsCard";
 import { CommandPalette } from "@/components/home/CommandPalette";
 import { RELEASE_NOTES } from "@/lib/releaseNotes";
 import { randomTip } from "@/lib/tips";
+import { pickGreeting } from "@/lib/greetings";
 import { ALL_TOOLS } from "@/lib/tools";
 import { TOOL_ICON_MAP } from "@/lib/toolIcons";
 import { getToolUsageCounts } from "@/lib/recentTools";
@@ -73,14 +74,6 @@ const CATEGORY_META: Record<string, { icon: typeof ImageIcon; tint: string }> = 
   "3d": { icon: Box, tint: "#7c5cff" },
 };
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return "Working late";
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-}
-
 /**
  * Magnific-style home: a big friendly greeting, one search bar, tool
  * tiles, your most recent work, and what's new — everything one click away.
@@ -105,6 +98,14 @@ export function HomeDashboard({
   // there's nothing for React to reconcile/redo.
   const [tip, setTip] = useState<string | null>(null);
   useEffect(() => setTip(randomTip()), []);
+  // Same reasoning as `tip` above, plus one more wrinkle: the server
+  // (Vercel, UTC) and the browser (the user's own timezone) don't agree on
+  // "what hour is it" either, so picking the greeting during render — as
+  // the old static `greeting()` helper did — could SSR one greeting and
+  // hydrate a different one. Starting from `null` and filling it in after
+  // mount sidesteps both mismatches in one move.
+  const [greetingLine, setGreetingLine] = useState<string | null>(null);
+  useEffect(() => setGreetingLine(pickGreeting(new Date().getHours(), firstName)), [firstName]);
   const [toolsSectionDrawerOpen, setToolsSectionDrawerOpen] = useState(false);
   const toolsSectionRef = useRef<HTMLButtonElement>(null);
 
@@ -199,8 +200,7 @@ export function HomeDashboard({
       <div className="mx-auto max-w-5xl px-4 md:px-6 py-10 flex flex-col gap-8">
         <div className="text-center">
           <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-            {greeting()}
-            {firstName ? `, ${firstName}` : ""} — start creating!
+            {greetingLine ?? (firstName ? `Welcome back, ${firstName}` : "Welcome back")}
           </h1>
         </div>
 

@@ -56,8 +56,6 @@ export function ThemeToggle({ className }: { className?: string }) {
     function onStorage(e: StorageEvent) {
       if (e.key !== "revolio-theme") return;
       const isLight = e.newValue === "light";
-      document.documentElement.classList.add("theme-transition");
-      window.setTimeout(() => document.documentElement.classList.remove("theme-transition"), 220);
       setLight(isLight);
       document.documentElement.classList.toggle("light", isLight);
       syncThemeColorMeta(isLight);
@@ -68,12 +66,13 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   function toggle() {
     const next = !(light ?? false);
-    // Briefly makes ~every element's color-related properties transition
-    // instead of snapping, so the light/dark swap crossfades — removed a
-    // moment later so it never lingers and fight with anything else's own
-    // transitions. See the `html.theme-transition` rule in globals.css.
-    document.documentElement.classList.add("theme-transition");
-    window.setTimeout(() => document.documentElement.classList.remove("theme-transition"), 220);
+    // The theme itself snaps instantly — no page-wide color transition.
+    // Forcing every element on the page (via a `*` selector) to animate its
+    // colors simultaneously is expensive on content-heavy pages (Gallery/
+    // Community, with dozens of cards each carrying their own transition-
+    // colors utility) and is what caused the choppiness. All the actual
+    // "animation" here is deliberately contained to this button: the press
+    // scale below and the Sun/Moon icon swap, both cheap and local.
     setLight(next);
     document.documentElement.classList.toggle("light", next);
     syncThemeColorMeta(next);
@@ -88,7 +87,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={toggle}
       title={light === null ? undefined : light ? "Switch to night mode" : "Switch to bright mode"}
       className={
-        "flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-surface-2 text-muted hover:text-foreground transition-colors " +
+        "flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-surface-2 text-muted hover:text-foreground transition-[color,background-color,transform] duration-150 active:scale-90 " +
         (className ?? "")
       }
     >

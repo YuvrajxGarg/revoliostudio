@@ -1,5 +1,29 @@
 export type GenerationStatus = "queued" | "processing" | "completed" | "failed";
 
+export type ProfileRole = "strategist" | "designer" | "producer" | "video_editor" | "founder";
+
+export const PROFILE_ROLE_LABELS: Record<ProfileRole, string> = {
+  strategist: "Strategist",
+  designer: "Designer",
+  producer: "Producer",
+  video_editor: "Video Editor",
+  founder: "Founder",
+};
+
+/**
+ * Public-safe subset of `profiles`, returned by the get_public_profile_by_username
+ * / get_public_profiles RPCs (0032 migration). Never includes email or is_admin.
+ */
+export interface PublicProfile {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  role: ProfileRole | null;
+  created_at: string;
+}
+
 export interface Generation {
   id: string;
   user_id: string;
@@ -43,6 +67,11 @@ export interface Generation {
     display_name: string | null;
     avatar_url: string | null;
   } | null;
+  /** Attached client-side by useCommunityGenerations / usePublicUserGenerations
+   * (batch RPC) — the publishing user's public profile, for the Community
+   * feed / public profile page's author chip. Undefined everywhere else
+   * Generation is used (Home/Gallery/Library/tool studios/etc). */
+  author?: PublicProfile | null;
 }
 
 export interface ReferenceImage {
