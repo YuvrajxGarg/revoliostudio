@@ -550,30 +550,43 @@ export function ExplainerStudioView() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto px-3 pb-6 pt-3">
-      <div className="mx-auto flex w-full max-w-2xl shrink-0 items-center justify-between pb-4">
-        <h1 className="text-base font-semibold flex items-center gap-1.5">
-          <Workflow className="h-4 w-4" /> Explainer Storyboard
-        </h1>
-        <div className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-2 p-0.5">
-          <button
-            onClick={() => setMainTab("generate")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-              mainTab === "generate" ? "bg-accent text-white" : "text-muted hover:text-foreground"
-            )}
-          >
-            <Wand2 className="h-3.5 w-3.5" /> Generate
-          </button>
-          <button
-            onClick={() => setMainTab("gallery")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-              mainTab === "gallery" ? "bg-accent text-white" : "text-muted hover:text-foreground"
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" /> Gallery
-            {items.length > 0 && <span className="text-[10px] opacity-70">({items.length})</span>}
-          </button>
+      {/* Banner header — Community-style: icon chip + title + tagline, with
+          the Generate/Gallery pill toggle on the right. Always centered to
+          the wizard body's column width, independent of which tab is
+          active (Gallery breaks out to the full stage width below; this
+          header never does), so it reads as the whole panel's title bar. */}
+      <div className="mx-auto mb-4 w-full max-w-2xl shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface p-5 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+              <Workflow className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Explainer Storyboard</h1>
+              <p className="mt-0.5 text-xs text-muted">Turn a script into a rendered shot-by-shot storyboard</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 rounded-full border border-border-subtle bg-surface-2 p-1">
+            <button
+              onClick={() => setMainTab("generate")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                mainTab === "generate" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+              )}
+            >
+              <Wand2 className="h-3.5 w-3.5" /> Generate
+            </button>
+            <button
+              onClick={() => setMainTab("gallery")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                mainTab === "gallery" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Gallery
+              {items.length > 0 && <span className="text-[10px] opacity-70">({items.length})</span>}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -595,31 +608,35 @@ export function ExplainerStudioView() {
           />
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-          {/* Stepper */}
-          <div className="flex items-center justify-center">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className={cn("flex items-center", i < STEPS.length - 1 && "flex-1")}>
-                <button
-                  onClick={() => goToStep(s.id)}
-                  className={cn(
-                    "flex items-center gap-2 whitespace-nowrap text-sm font-medium",
-                    step === s.id ? "text-accent" : step > s.id ? "text-foreground/70" : "text-muted"
-                  )}
-                >
-                  <span
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+          {/* Stepper — boxed to match the header/content cards, so the
+              whole thing reads as one continuous window instead of loose
+              floating pieces. */}
+          <div className="rounded-2xl border border-border-subtle bg-surface p-4">
+            <div className="flex items-center justify-center">
+              {STEPS.map((s, i) => (
+                <div key={s.id} className={cn("flex items-center", i < STEPS.length - 1 && "flex-1")}>
+                  <button
+                    onClick={() => goToStep(s.id)}
                     className={cn(
-                      "flex h-6 w-6 items-center justify-center rounded-full text-[11px]",
-                      step === s.id ? "bg-accent text-white" : step > s.id ? "bg-foreground/20" : "bg-surface-2"
+                      "flex items-center gap-2 whitespace-nowrap text-sm font-medium",
+                      step === s.id ? "text-accent" : step > s.id ? "text-foreground/70" : "text-muted"
                     )}
                   >
-                    {step > s.id ? <Check className="h-3 w-3" /> : s.id}
-                  </span>
-                  {s.label}
-                </button>
-                {i < STEPS.length - 1 && <div className="mx-3 h-px flex-1 bg-border-subtle" />}
-              </div>
-            ))}
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full text-[11px]",
+                        step === s.id ? "bg-accent text-white" : step > s.id ? "bg-foreground/20" : "bg-surface-2"
+                      )}
+                    >
+                      {step > s.id ? <Check className="h-3 w-3" /> : s.id}
+                    </span>
+                    {s.label}
+                  </button>
+                  {i < STEPS.length - 1 && <div className="mx-3 h-px flex-1 bg-border-subtle" />}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-border-subtle/60 bg-surface/50 backdrop-blur-md shadow-lg p-5">
