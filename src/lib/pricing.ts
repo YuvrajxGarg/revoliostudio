@@ -1,0 +1,384 @@
+/**
+ * Approximate per-generation cost estimator.
+ *
+ * muapi.ai's real pricing is dynamic per-model (see /api/v1/models —
+ * fields `cost`, `cost_currency`, `dynamic_pricing`). We don't call that
+ * live on every keystroke (adds latency to the composer), so instead we
+ * use tiered heuristics calibrated against real costs pulled from
+ * muapi's own catalog (e.g. Meshy 3D = $0.50, mid-tier image edits =
+ * $0.02-0.05, premium video 5s = $0.70-2.10) to show a fast, "close
+ * enough" estimate next to the Generate button - labeled as an estimate,
+ * not an exact invoice amount.
+ */
+
+import { ModelConfig } from "./models";
+
+// Approximate USD -> INR. Update if it drifts noticeably from the market rate.
+const INR_PER_USD = 88;
+
+const PREMIUM_PROVIDERS = new Set(["OpenAI", "Google", "Midjourney", "Runway", "Kuaishou"]);
+const BUDGET_PROVIDERS = new Set(["Vidu", "Lightricks", "Pixverse", "MiniMax"]);
+
+function isHeavyVariant(label: string): boolean {
+  return /\b(pro|ultra|max|master|4k|2\.0|4\.5|5\.0|vip)\b/i.test(label);
+}
+
+function baseImageCostUSD(model: ModelConfig): number {
+  if (model.provider === "Meshy") return 0.5;
+  let cost = 0.02;
+  if (PREMIUM_PROVIDERS.has(model.provider)) cost = 0.045;
+  if (isHeavyVariant(model.label)) cost += 0.02;
+  return cost;
+}
+
+function baseVideoCostPerSecondUSD(model: ModelConfig): number {
+  let perSecond = 0.025;
+  if (PREMIUM_PROVIDERS.has(model.provider)) perSecond = 0.09;
+  else if (BUDGET_PROVIDERS.has(model.provider)) perSecond = 0.018;
+  if (isHeavyVariant(model.label)) perSecond *= 1.4;
+  return perSecond;
+}
+
+export interface CostEstimateSettings {
+  numImages?: number;
+  duration?: number;
+  resolution?: string;
+}
+
+// Flat per-call costs for enhance-mode tools (upscale, background removal —
+// no duration/numImages to scale against), pulled from muapi's own catalog
+// `cost` field rather than the duration-based video heuristic below.
+const ENHANCE_COST_USD: Record<string, number> = {
+  "topaz-image-upscale": 0.075,
+  "ai-image-upscaler": 0.02,
+  "ai-video-upscaler": 0.03,
+  // Now routed to Photoroom's Remove Background API (Basic plan, $0.02/image
+  // — docs.photoroom.com/getting-started/pricing) instead of muapi's own
+  // background remover, per user feedback that muapi's cutouts weren't clean.
+  "ai-background-remover": 0.02,
+  // Verified against muapi.ai/playground/group/video-edit (2026-07-15).
+  "video-watermark-remover": 0.065,
+};
+
+// Real flat per-generation costs pulled directly from muapi's own catalog
+// `cost` field for specific models (verified via /api/v1/models/{slug}) —
+// these override the provider-tier heuristic above where we have an exact
+// number instead of an estimate, and don't scale with duration.
+//
+// The nano-banana entries matter beyond accuracy: muapi's real catalog
+// prices the base (text-to-image) and Edit (reference-guided) endpoint of
+// each tier IDENTICALLY (nano-banana $0.03/$0.03, nano-banana-2 $0.06/$0.06,
+// nano-banana-pro $0.12/$0.12 — confirmed against the live catalog). The old
+// heuristic didn't know this, so switching to the Edit sibling after
+// attaching a reference could visually look like a cost increase even
+// though muapi charges the same base rate either way. See EDIT_COUNTERPART
+// in models.ts for why the switch itself happens — muapi's base t2i schemas
+// have no image-input field at all, so there's no way to send a reference
+// to e.g. "nano-banana-pro" without moving to its Edit counterpart.
+// Verified against every video model's live schema too (see below) — 44 of
+// 52 image models in the registry fetched cleanly; the 6 that returned an
+// empty body (flux-dev, flux-schnell, hidream-fast/dev/full, seededit,
+// midjourney-edit) likely have retired/renamed slugs on muapi's side and
+// still fall back to the provider-tier heuristic below until their real
+// slug is confirmed. (seedream-5's old guessed slug was in this list too —
+// fixed by pointing it at the real muapi.ai/seedream endpoints below.
+// seedream-v4-edit was also in this list for the same reason — its
+// registered slug had "edit"/"v4" in the wrong order — fixed by correcting
+// the slug in models.ts; its real cost is confirmed flat $0.04/image,
+// matching the base t2i model, via a live schema fetch.)
+const IMAGE_FLAT_COST_USD: Record<string, number> = {
+  "flux-2-klein-4b-turbo-edit": 0.0078,
+  "flux-2-klein-4b-edit": 0.0156,
+  "flux-2-klein-9b-turbo-edit": 0.0104,
+  "nano-banana": 0.03,
+  "nano-banana-edit": 0.03,
+  "nano-banana-2": 0.06,
+  "nano-banana-2-edit": 0.06,
+  "nano-banana-pro": 0.12,
+  "nano-banana-pro-edit": 0.12,
+  "seedream-v4": 0.04,
+  "seedream-v4-edit": 0.04,
+  // Verified against muapi.ai/seedream (2026) — Pro starts at $0.045/image
+  // (1K, rising to $0.09 at 2K), Lite is a flat $0.0325/image up to 4K. Pro's
+  // 1K/2K split is now handled by IMAGE_RESOLUTION_FLAT_COST_USD below; this
+  // 0.045 entry stays as the fallback when settings.resolution is unset.
+  "seedream-5-pro": 0.045,
+  "seedream-5-pro-edit": 0.045,
+  "seedream-5-lite": 0.0325,
+  "seedream-5-lite-edit": 0.0325,
+  "flux-krea": 0.015,
+  "flux-2-dev": 0.015,
+  "flux-2-pro": 0.032,
+  "flux-2-flex": 0.09,
+  "wan2.7-image": 0.05,
+  "wan2.7-image-pro": 0.1,
+  // Confirmed via muapi's authenticated estimate-cost endpoint (real user
+  // API key, live call) — resolution-tiered: $0.06 @ 1K, $0.09 @ 2K,
+  // $0.15 @ 4K (all at "high" quality). See IMAGE_RESOLUTION_FLAT_COST_USD
+  // below for the real per-resolution prices. This 0.09 stays as the
+  // fallback for the default (2K) tier when settings.resolution is unset.
+  // Note: muapi's schema for this model also exposes a separate "quality"
+  // dropdown (low/medium/high, confirmed cheaper at low/medium — e.g. 2K
+  // costs $0.04 at low quality vs $0.09 at high) but our payload never
+  // submits that field today (RESOLUTION_CANDIDATES in generate.ts matches
+  // "resolution" first and only sends one field), so muapi always defaults
+  // to "high" server-side — meaning the resolution-only ladder below is a
+  // fully accurate model of what we actually charge right now. If a
+  // quality selector ever gets wired into the UI, this needs a second
+  // dimension.
+  "gpt4o-image": 0.04,
+  "gpt-image-2": 0.09,
+  "imagen4": 0.03,
+  "imagen4-ultra": 0.06,
+  "midjourney-v7": 0.1,
+  "midjourney-v8": 0.1,
+  "seedream-v4.5": 0.05,
+  "qwen-image": 0.03,
+  "qwen-image-2": 0.04,
+  // Verified flat via muapi's authenticated estimate-cost endpoint — despite
+  // exposing a resolution dropdown (1k/2k) and dynamic_pricing:true in its
+  // schema, the actual billed cost is identical at both tiers ($0.036).
+  // Previously flagged as unverified; confirmed correct as-is.
+  "kling-o1-image": 0.036,
+  // Verified flat via muapi's authenticated estimate-cost endpoint — same
+  // situation as kling-o1-image above: resolution dropdown (1K/2K, and by
+  // strong inference 4K) exists but the billed cost doesn't move ($0.027).
+  // Previously flagged as unverified; confirmed correct as-is.
+  "kling-o3-image": 0.027,
+  "hunyuan-image": 0.035,
+  "hunyuan-image-3": 0.065,
+  "ideogram-v3": 0.02,
+  "reve-image": 0.032,
+  "z-image": 0.013,
+  "z-image-turbo": 0.007,
+  "leonardo-lucid": 0.03,
+  "leonardo-phoenix": 0.05,
+  "grok-image": 0.05,
+  "flux-kontext-pro-edit": 0.03,
+  "flux-kontext-max-edit": 0.06,
+  "flux-2-pro-edit": 0.032,
+  "gpt4o-edit": 0.04,
+  "gpt-image-2-edit": 0.09,
+  "seedream-4.5-edit": 0.05,
+  "reve-edit": 0.05,
+  "qwen-edit": 0.03,
+  "qwen-edit-plus": 0.03,
+  "nano-banana-effects": 0.03,
+  "kling-o1-edit": 0.036,
+  "kling-o3-edit": 0.027,
+  "wan2.7-edit": 0.05,
+  "ideogram-reframe": 0.15,
+  "flux-pulid": 0.04,
+  "grok-edit": 0.05,
+};
+
+// Real per-second video costs, derived from muapi's own catalog `cost`
+// field divided by that model's default duration — verified live against
+// every t2v/i2v/flf/omni model in the registry via /api/v1/models/{slug}.
+//
+// This used to be a VIDEO_FLAT_COST_USD table applied as a single flat
+// number regardless of chosen duration, which was wrong for every model
+// that has an adjustable duration control since it scales the real muapi
+// bill. The bug this was reported against: "seedance-2-omni" (multi-ref
+// mode) wasn't even in that table, so it fell through to the generic
+// heuristic below and showed ~$0.14-0.18 for a 4s clip when muapi actually
+// charges $0.30/sec (high quality, the default) — $1.20 for 4s, matching
+// what was reported. A second report showed the same gap on plain
+// "Seedance 2.0" (seedance-2-t2v, text-to-video): heuristic showed $0.17
+// for 5s, real rate is $0.25/sec ($1.25 for 5s).
+const VIDEO_PER_SECOND_COST_USD: Record<string, number> = {
+  "kling-v2.5-turbo-pro-i2v": 0.09,
+  "kling-v2.5-turbo-std-i2v": 0.056,
+  "seedance-lite-i2v": 0.02,
+  "seedance-pro-i2v-fast": 0.012,
+  // Fallback only — seedance-2-mini-i2v's real rate depends on the selected
+  // resolution (480p vs 720p) and is handled by VIDEO_RESOLUTION_PER_SECOND_COST_USD
+  // below. This flat 0.08 (480p rate) is only used if settings.resolution is
+  // missing entirely (e.g. the preview estimates in ModelSelector/EditVideoComposer
+  // that call estimateCostUSD with no settings at all).
+  "seedance-2-mini-i2v": 0.08,
+  // Seedance 2.0 / sd-2 family — catalog cost $1.25 @ 5s default for
+  // i2v/first-last-frame/t2v, $1.50 @ 5s default for omni-reference.
+  "seedance-2-t2v": 0.25,
+  "seedance-2-i2v": 0.25,
+  "seedance-2-flf": 0.25,
+  "seedance-2-omni": 0.3,
+  "kling-v3-pro-t2v": 0.144,
+  "kling-v3-std-t2v": 0.144,
+  "kling-v3-pro-i2v": 0.144,
+  "kling-v3-std-i2v": 0.144,
+  "veo3.1": 0.3125,
+  "veo3.1-i2v": 0.3125,
+  "veo3.1-ref": 0.075,
+  "veo4": 0.375,
+  "kling-master-t2v": 0.24,
+  "kling-master-i2v": 0.06,
+  "kling-std-i2v": 0.045,
+  "kling-pro-i2v": 0.08,
+  "kling-v3-4k-t2v": 0.4,
+  "kling-v3-4k-i2v": 0.4,
+  "kling-v3-omni-t2v": 0.112,
+  "kling-v3-omni-i2v": 0.112,
+  "wan2.7-t2v": 0.02,
+  "wan2.7-i2v": 0.02,
+  "wan2.7-ref": 0.02,
+  "seedance-pro-t2v": 0.036,
+  "seedance-pro-i2v": 0.036,
+  "seedance-2-vip-t2v": 0.3,
+  "seedance-2-vip-i2v": 0.3,
+  "runway-t2v": 0.018,
+  "runway-i2v": 0.03,
+  "pixverse-v6-t2v": 0.059,
+  "pixverse-v6-i2v": 0.059,
+  "pixverse-v6-transition": 0.06,
+  "vidu-q3-pro-t2v": 0.15,
+  "vidu-q3-pro-i2v": 0.15,
+  "vidu-q3-flf": 0.15,
+  "ltx-2-pro-t2v": 0.0767,
+  "ltx-2-pro-i2v": 0.0767,
+  "sora-2-t2v": 0.1,
+  "sora-2-i2v": 0.1,
+  "sora-2-pro-t2v": 0.3,
+  "sora-2-pro-i2v": 0.3,
+};
+
+// Some models' real per-second rate isn't a single number — it depends on
+// the selected resolution/quality tier. Found via a live user report: the
+// composer showed $0.80 for a 10s Seedance 2.0 Mini clip (flat 0.08/sec)
+// but the completed generation was actually billed $1.50 (i.e. 0.15/sec) —
+// because the user had 720p selected. muapi.ai/seedance-2 confirms Mini
+// tier is "$0.08-$0.15/sec" across "480p-720p": 0.08 is the 480p rate and
+// 0.15 is the 720p rate, not two ends of a vague range. Keyed by the exact
+// resolution string values the live schema returns (see SettingsBar's
+// `schema.resolutions`).
+const VIDEO_RESOLUTION_PER_SECOND_COST_USD: Record<string, Record<string, number>> = {
+  "seedance-2-mini-i2v": { "480p": 0.08, "720p": 0.15 },
+};
+
+// Same problem as VIDEO_RESOLUTION_PER_SECOND_COST_USD but for images — some
+// image models' real per-image price also depends on the selected output
+// resolution rather than being a single flat number.
+//
+// seedream-5-pro: muapi.ai/seedream explicitly states "$0.045/image at 1K
+// resolution, or $0.09/image at 2K resolution" — a flat-out 2x difference
+// we were missing entirely (IMAGE_FLAT_COST_USD had it hardcoded at the 1K
+// rate no matter what the user picked).
+//
+// gpt-image-2: confirmed live via muapi's authenticated estimate-cost
+// endpoint (real user API key) — $0.06 @ 1K, $0.09 @ 2K, $0.15 @ 4K, all at
+// the "high" quality tier muapi defaults to since we never submit a
+// separate quality field (see the comment on IMAGE_FLAT_COST_USD's
+// gpt-image-2 entry).
+//
+// Keyed by the exact resolution string the live schema returns; casing is
+// covered defensively for both "1K"/"2K"/"4K" and "1k"/"2k"/"4k" since this
+// sandbox couldn't always confirm the literal enum casing muapi returns for
+// every model.
+const IMAGE_RESOLUTION_FLAT_COST_USD: Record<string, Record<string, number>> = {
+  "seedream-5-pro": { "1K": 0.045, "2K": 0.09, "1k": 0.045, "2k": 0.09 },
+  "seedream-5-pro-edit": { "1K": 0.045, "2K": 0.09, "1k": 0.045, "2k": 0.09 },
+  "gpt-image-2": { "1K": 0.06, "2K": 0.09, "4K": 0.15, "1k": 0.06, "2k": 0.09, "4k": 0.15 },
+  // Not independently tested (only the t2i endpoint was queried live), but
+  // shares the same "gpt-image-2-cost" cost_strategy per muapi's schema, so
+  // applying the same resolution ladder here rather than leaving it flat.
+  "gpt-image-2-edit": { "1K": 0.06, "2K": 0.09, "4K": 0.15, "1k": 0.06, "2k": 0.09, "4k": 0.15 },
+};
+
+// Real FLAT per-generation video costs — these models' live schemas expose
+// no adjustable `duration` field at all (fixed-length output, or length
+// driven entirely by an input clip like Edit Video / Motion Control), so
+// unlike the per-second table above the duration picker in our UI doesn't
+// change what muapi actually bills and the cost should never be multiplied
+// by the selected duration.
+const VIDEO_FLAT_COST_USD: Record<string, number> = {
+  // Was 2.5 — a 5x overcharge. muapi.ai/veo3 states directly: "Veo 3 Text to
+  // Video / Image to Video ~$0.50/video". Confirmed via live audit against
+  // muapi's own pricing page (2026).
+  veo3: 0.5,
+  "veo3-i2v": 0.5,
+  "hunyuan-t2v": 0.15,
+  "hunyuan-i2v": 0.15,
+  "minimax-2.3-pro-t2v": 0.63,
+  "minimax-2.3-pro-i2v": 0.63,
+  "leonardo-motion": 0.4,
+  // Was 0.654 — wrong the other way. Re-verified 2026-07-15 against
+  // muapi.ai/playground/group/video-edit's own listing, which prices this
+  // exact endpoint slug ("kling-o1-video-edit", distinct from the
+  // "-fast"/"-standard" siblings we don't carry) at $1.09 effective — also
+  // matches a fresh user-reported Generate button screenshot showing
+  // "$1.09" for this same model. The earlier 0.654 figure was likely read
+  // off the wrong sibling (kling-o1-video-edit-fast, $0.585) or a stale
+  // muapi price; reverting to the confirmed-current $1.09.
+  "kling-o1-video-edit": 1.09,
+  "runway-motion-control": 0.07,
+  // Verified against muapi.ai/playground/group/video-edit's own listing
+  // (2026-07-15) — flat per-generation costs, not duration-scaled (none of
+  // these expose a duration control in our UI). Added alongside the models
+  // themselves; without an entry here they were silently falling through to
+  // the generic per-second heuristic, which is off by 2-4x for most of these.
+  "kling-v3-pro-motion-control": 0.16,
+  "kling-v3-std-motion-control": 0.1,
+  "kling-v2.6-pro-motion-control": 0.145,
+  "kling-v2.6-std-motion-control": 0.45,
+  "ai-dance-effects": 0.3,
+  "ai-video-face-swap": 0.1,
+  "luma-flash-reframe": 0.35,
+  autocrop: 0.05,
+};
+
+// Audio models — not independently confirmed against a live authenticated
+// muapi estimate-cost call (see the doc comment on the `audio` section of
+// models.ts), so these are rough placeholders based on typical wrapper-API
+// pricing for Suno-style full-song generation vs. MMAudio-style short
+// clips, clearly rougher than the rest of this file's verified numbers.
+const AUDIO_FLAT_COST_USD: Record<string, number> = {
+  "suno-music": 0.12,
+  "mmaudio-text-to-audio": 0.02,
+};
+
+/** Rough estimated cost in USD for one generate click with the given settings. */
+export function estimateCostUSD(model: ModelConfig, settings: CostEstimateSettings): number {
+  if (model.mode === "enhance" && ENHANCE_COST_USD[model.id] != null) {
+    return ENHANCE_COST_USD[model.id];
+  }
+  if (model.category === "3d") {
+    return model.provider === "Meshy" ? 0.5 : 0.4;
+  }
+  if (model.category === "audio") {
+    return AUDIO_FLAT_COST_USD[model.id] ?? 0.05;
+  }
+  if (model.category === "image") {
+    const imageResolutionRates = IMAGE_RESOLUTION_FLAT_COST_USD[model.id];
+    const imageResolutionRate =
+      imageResolutionRates && settings.resolution ? imageResolutionRates[settings.resolution] : undefined;
+    const per = imageResolutionRate ?? IMAGE_FLAT_COST_USD[model.id] ?? baseImageCostUSD(model);
+    const n = Math.max(1, settings.numImages || 1);
+    return round3(per * n);
+  }
+  // video
+  if (VIDEO_FLAT_COST_USD[model.id] != null) {
+    return VIDEO_FLAT_COST_USD[model.id];
+  }
+  // Always scale by the actually-selected duration, using a verified real
+  // per-second rate where we have one and falling back to the
+  // provider-tier heuristic otherwise (currently just midjourney-i2v,
+  // whose muapi slug returned an empty response on fetch).
+  const dur = settings.duration ?? model.defaultDuration ?? 5;
+  const resolutionRates = VIDEO_RESOLUTION_PER_SECOND_COST_USD[model.id];
+  const resolutionRate = resolutionRates && settings.resolution ? resolutionRates[settings.resolution] : undefined;
+  const perSecond = resolutionRate ?? VIDEO_PER_SECOND_COST_USD[model.id] ?? baseVideoCostPerSecondUSD(model);
+  return round3(perSecond * dur);
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+export function formatCostUSD(usd: number): string {
+  return usd < 0.1 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`;
+}
+
+export function formatCostINR(usd: number): string {
+  const inr = usd * INR_PER_USD;
+  return inr < 10 ? `₹${inr.toFixed(1)}` : `₹${Math.round(inr)}`;
+}

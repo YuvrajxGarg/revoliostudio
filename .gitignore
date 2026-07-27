@@ -1,0 +1,28 @@
+.vercel
+
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# deps
+node_modules
+
+# build output
+.next
+out
+build
+dist
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+.turbo
+
+# large media assets — not source, keep out of git history
+/Effect previews/
+/Higgsfield Presets/
+tsconfig.tsbuildinfo
