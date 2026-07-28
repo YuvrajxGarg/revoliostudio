@@ -241,61 +241,6 @@ export function HomeDashboard({
           ))}
         </div>
 
-        {/* Magnific-style bounded panels: Projects | Recent work. */}
-        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3 items-stretch">
-          <ProjectsCard />
-          <div className="flex min-w-0 flex-col rounded-2xl border border-border-subtle bg-surface p-4">
-            <div className="flex items-center justify-between pb-3">
-              <Link href="/gallery" className="flex items-center gap-1 text-sm font-medium hover:text-accent">
-                Recent work <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-              <Link href="/gallery" className="text-xs text-muted hover:text-foreground">
-                My work
-              </Link>
-            </div>
-            {recent.loading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="aspect-square rounded-2xl shimmer" />
-                ))}
-              </div>
-            ) : recent.items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-1 py-16 text-center text-muted">
-                <p className="text-sm">Nothing yet — open a tool above and generate your first piece.</p>
-              </div>
-            ) : (
-              // Boxed preview cards — a uniform grid with a real gap and a
-              // bigger radius per card (rather than the Gallery's tightly
-              // packed justified-rows masonry), so this reads as a set of
-              // distinct tiles at a glance, Magnific-style. Each tile still
-              // wraps the real GenerationCard so opening it, the hover
-              // toolbar, and deletion all work exactly like every other
-              // gallery in the app.
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {recent.items.slice(0, 8).map((item) => {
-                  const meta = CATEGORY_META[item.category];
-                  return (
-                    <div
-                      key={item.id}
-                      className="group relative aspect-square overflow-hidden rounded-2xl border border-border-subtle bg-surface-2 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg"
-                    >
-                      <GenerationCard generation={item} fill onDeleted={recent.removeItem} />
-                      {meta && (
-                        <span
-                          className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-md backdrop-blur-sm"
-                          style={{ backgroundColor: `${meta.tint}cc` }}
-                        >
-                          <meta.icon className="h-3 w-3 text-white" />
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Tools — a few of your pinned studios/shortcuts, with a link to
             the full "All tools" drawer for everything else. */}
         <div className="flex flex-col gap-3">
@@ -374,6 +319,61 @@ export function HomeDashboard({
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Magnific-style bounded panels: Projects | Recent work. */}
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-3 items-stretch">
+          <ProjectsCard />
+          <div className="flex min-w-0 flex-col rounded-2xl border border-border-subtle bg-surface p-4">
+            <div className="flex items-center justify-between pb-3">
+              <Link href="/gallery" className="flex items-center gap-1 text-sm font-medium hover:text-accent">
+                Recent work <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+              <Link href="/gallery" className="text-xs text-muted hover:text-foreground">
+                My work
+              </Link>
+            </div>
+            {recent.loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="aspect-square rounded-2xl shimmer" />
+                ))}
+              </div>
+            ) : recent.items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-1 py-16 text-center text-muted">
+                <p className="text-sm">Nothing yet — open a tool above and generate your first piece.</p>
+              </div>
+            ) : (
+              // Boxed preview cards — a uniform grid with a real gap and a
+              // bigger radius per card (rather than the Gallery's tightly
+              // packed justified-rows masonry), so this reads as a set of
+              // distinct tiles at a glance, Magnific-style. Each tile still
+              // wraps the real GenerationCard so opening it, the hover
+              // toolbar, and deletion all work exactly like every other
+              // gallery in the app.
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {recent.items.slice(0, 8).map((item) => {
+                  const meta = CATEGORY_META[item.category];
+                  return (
+                    <div
+                      key={item.id}
+                      className="group relative aspect-square overflow-hidden rounded-2xl border border-border-subtle bg-surface-2 transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-lg"
+                    >
+                      <GenerationCard generation={item} fill onDeleted={recent.removeItem} />
+                      {meta && (
+                        <span
+                          className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-md backdrop-blur-sm"
+                          style={{ backgroundColor: `${meta.tint}cc` }}
+                        >
+                          <meta.icon className="h-3 w-3 text-white" />
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
