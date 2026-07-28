@@ -28,7 +28,7 @@ import { CategoryBreakdownBar } from "@/components/profile/CategoryBreakdownBar"
 import { StreakCard } from "@/components/profile/StreakCard";
 import { PeakHourDial } from "@/components/profile/PeakHourDial";
 import { AchievementBadges } from "@/components/profile/AchievementBadges";
-import { MiniBars, ProgressRing } from "@/components/profile/StatVisuals";
+import { MiniBars, WeekdayRhythm, DotCollection, ShareBar } from "@/components/profile/StatVisuals";
 import {
   PROFILE_ROLE_LABELS,
   type DailyCategoryCounts,
@@ -44,6 +44,20 @@ function recentDailyTotals(dailyCounts: Record<string, DailyCategoryCounts>) {
     values: days.map((d) => dailyCounts[format(d, "yyyy-MM-dd")]?.total ?? 0),
     labels: days.map((d) => format(d, "MMM d")),
   };
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Totals bucketed by day of week, for the Active days tile's rhythm chart. */
+function weekdayTotals(dailyCounts: Record<string, DailyCategoryCounts>) {
+  const buckets = new Array(7).fill(0) as number[];
+  for (const [day, counts] of Object.entries(dailyCounts ?? {})) {
+    // parse as local midnight — `new Date("YYYY-MM-DD")` is UTC and can
+    // land on the previous weekday for negative-offset viewers
+    const [y, m, d] = day.split("-").map(Number);
+    buckets[new Date(y, m - 1, d).getDay()] += counts.total;
+  }
+  return buckets;
 }
 
 const ROLE_ICONS: Record<ProfileRole, typeof Compass> = {
@@ -149,23 +163,31 @@ export function UserProfileView({ username }: { username: string }) {
                     }
                     caption="last 14 days"
                   />
-                  <StatTile
-                    index={1}
-                    icon={CalendarDays}
-                    label="Active days"
-                    value={stats.active_days}
-                    colorVar="var(--series-image)"
-                    ring={stats.active_days / 365}
-                    caption="days created on"
-                  />
+                  {(() => {
+                    const weekdays = weekdayTotals(stats.daily_counts);
+                    const topDay = weekdays.indexOf(Math.max(...weekdays));
+                    return (
+                      <StatTile
+                        index={1}
+                        icon={CalendarDays}
+                        label="Active days"
+                        value={stats.active_days}
+                        colorVar="var(--series-image)"
+                        visual={<WeekdayRhythm counts={weekdays} colorVar="var(--series-image)" />}
+                        caption={`busiest on ${WEEKDAY_NAMES[topDay]}s`}
+                      />
+                    );
+                  })()}
                   <StatTile
                     index={2}
                     icon={Layers}
                     label="Models used"
                     value={stats.distinct_models}
                     colorVar="var(--series-3d)"
-                    ring={stats.distinct_models / 40}
-                    caption="of 40+ available"
+                    visual={
+                      <DotCollection owned={stats.distinct_models} total={40} colorVar="var(--series-3d)" />
+                    }
+                    caption={`${Math.max(0, 40 - stats.distinct_models)} left to try`}
                   />
                   <StatTile
                     index={3}
@@ -174,7 +196,19 @@ export function UserProfileView({ username }: { username: string }) {
                     value={stats.favorite_model_label ?? "—"}
                     isText
                     colorVar="var(--stat-pink)"
-                    caption="most reached for"
+                    visual={
+                      stats.total_generations > 0 && stats.favorite_model_count > 0 ? (
+                        <ShareBar
+                          ratio={stats.favorite_model_count / stats.total_generations}
+                          colorVar="var(--stat-pink)"
+                        />
+                      ) : undefined
+                    }
+                    caption={
+                      stats.favorite_model_count > 0
+                        ? `${Math.round((stats.favorite_model_count / stats.total_generations) * 100)}% of all work`
+                        : "most reached for"
+                    }
                   />
                 </div>
 
@@ -230,7 +264,6 @@ function StatTile({
   className,
   colorVar = "var(--accent)",
   visual,
-  ring,
   caption,
 }: {
   index: number;
@@ -241,10 +274,8 @@ function StatTile({
   isText?: boolean;
   className?: string;
   colorVar?: string;
-  /** optional sparkline (or similar) rendered under the value */
+  /** optional chart (bars, rhythm, share bar…) rendered under the value */
   visual?: React.ReactNode;
-  /** 0-1 — swaps the icon chip for a progress ring wrapping the icon */
-  ring?: number;
   caption?: string;
 }) {
   const animatedValue = useCountUp(typeof value === "number" ? value : 0);
@@ -278,21 +309,15 @@ function StatTile({
           </p>
         </div>
 
-        {ring !== undefined ? (
-          <ProgressRing progress={ring} colorVar={colorVar}>
-            <Icon className="h-3.5 w-3.5" style={{ color: colorVar }} />
-          </ProgressRing>
-        ) : (
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110"
-            style={{ backgroundColor: "color-mix(in srgb, var(--tile-color) 16%, transparent)", color: "var(--tile-color)" }}
-          >
-            <Icon className="h-4 w-4" />
-          </span>
-        )}
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110"
+          style={{ backgroundColor: "color-mix(in srgb, var(--tile-color) 16%, transparent)", color: "var(--tile-color)" }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
 
-      {visual && <div className="relative">{visual}</div>}
+      {visual && <div className="relative mt-auto pt-1">{visual}</div>}
       {caption && <p className="relative text-[10px] text-muted/80">{caption}</p>}
     </div>
   );

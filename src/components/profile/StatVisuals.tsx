@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 /**
  * Tiny inline bar chart for a stat tile. Bars grow in staggered from the
  * left on mount; the busiest bar is held at full color while the rest fade
@@ -49,38 +51,84 @@ export function MiniBars({
   );
 }
 
-/** Progress ring for a stat tile — shows how far along a value is toward a target. */
-export function ProgressRing({
-  progress,
-  colorVar,
-  children,
-}: {
-  progress: number;
-  colorVar: string;
-  children?: React.ReactNode;
-}) {
-  const r = 16;
-  const circumference = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(progress, 1));
+const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
+
+/**
+ * Seven-bar weekday rhythm — which days of the week this user actually
+ * shows up on. Reads as a shape (weekday grinder vs weekend hobbyist)
+ * rather than a number.
+ */
+export function WeekdayRhythm({ counts, colorVar }: { counts: number[]; colorVar: string }) {
+  const max = Math.max(...counts, 1);
+  const peak = counts.indexOf(Math.max(...counts));
 
   return (
-    <div className="relative h-10 w-10 shrink-0">
-      <svg viewBox="0 0 40 40" className="h-full w-full -rotate-90">
-        <circle cx="20" cy="20" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="3.5" />
-        <circle
-          cx="20"
-          cy="20"
-          r={r}
-          fill="none"
-          stroke={colorVar}
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - clamped)}
-          style={{ transition: "stroke-dashoffset 900ms cubic-bezier(0.16, 1, 0.3, 1)" }}
+    <div className="flex h-9 w-full items-end gap-1">
+      {counts.map((v, i) => {
+        const ratio = v / max;
+        const isPeak = i === peak && v > 0;
+        return (
+          <div key={i} className="flex flex-1 flex-col items-center gap-1" title={`${v} on ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][i]}`}>
+            <div
+              className="animate-bar-grow w-full rounded-[2px]"
+              style={{
+                height: `${Math.max(ratio * 22, 3)}px`,
+                backgroundColor: colorVar,
+                opacity: v === 0 ? 0.15 : isPeak ? 1 : 0.3 + ratio * 0.45,
+                animationDelay: `${i * 45}ms`,
+              }}
+            />
+            <span className={cn("text-[8px] leading-none", isPeak ? "text-foreground" : "text-muted/60")}>
+              {WEEKDAY_INITIALS[i]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Dot collection — `owned` of `total` pips lit, so model exploration reads
+ * as a collection being filled in rather than a bare count.
+ */
+export function DotCollection({
+  owned,
+  total,
+  colorVar,
+}: {
+  owned: number;
+  total: number;
+  colorVar: string;
+}) {
+  return (
+    <div className="flex w-full flex-wrap gap-[3px]">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className="animate-stat-tile-in h-1.5 w-1.5 rounded-full"
+          style={{
+            backgroundColor: i < owned ? colorVar : "var(--surface-2)",
+            opacity: i < owned ? 0.5 + (i / total) * 0.5 : 1,
+            animationDelay: `${i * 12}ms`,
+          }}
         />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">{children}</div>
+      ))}
+    </div>
+  );
+}
+
+/** Share bar — what fraction of the whole one item accounts for. */
+export function ShareBar({ ratio, colorVar }: { ratio: number; colorVar: string }) {
+  const pct = Math.max(0, Math.min(ratio, 1));
+  return (
+    <div className="w-full">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+        <div
+          className="h-full rounded-full transition-[width] duration-1000 ease-out"
+          style={{ width: `${pct * 100}%`, backgroundColor: colorVar }}
+        />
+      </div>
     </div>
   );
 }

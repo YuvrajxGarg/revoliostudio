@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Moon, Sun, Sunrise, Sunset } from "lucide-react";
 
 const C = 60; // center
-const R = 48; // hour ring radius
-const SEG_GAP_DEG = 3;
+const R = 46; // ring radius
+const CIRCUMFERENCE = 2 * Math.PI * R;
 
 function formatHour(hour: number): string {
   const period = hour < 12 ? "AM" : "PM";
@@ -20,90 +20,92 @@ function bandFor(hour: number) {
   return { icon: Moon, label: "Night owl" };
 }
 
-/** Hour (0-24, fractional ok) → point. 0h at the top, running clockwise. */
-function polar(hour: number, radius: number) {
-  const rad = (hour / 24) * Math.PI * 2 - Math.PI / 2;
-  return [C + Math.cos(rad) * radius, C + Math.sin(rad) * radius] as const;
-}
-
-/** SVG arc path between two hour positions at a fixed radius. */
-function arc(fromHour: number, toHour: number, radius: number) {
-  const [x1, y1] = polar(fromHour, radius);
-  const [x2, y2] = polar(toHour, radius);
-  return `M ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2}`;
-}
-
 /**
- * A 24-hour activity ring: midnight at the top, noon at the bottom, one
- * segment per hour, weighted by how much the user creates then. The
- * busiest hour is the only thing highlighted, and a small tick tracks the
- * viewer's current time. Deliberately spare — the hour and the label live
- * beside it in the card, so the ring only has to carry the shape.
+ * Minimal clock: a hairline ring, one accent arc sweeping from 12 round to
+ * the user's busiest hour, and a hand resting on it. Both the arc and the
+ * hand animate in from 12 on mount, which is the only motion in the card.
  *
- * Buckets arrive in UTC and are rotated into the viewer's own timezone
- * here, rounded to the nearest hour so half-hour zones like IST land on the
- * closest bucket rather than being dropped.
+ * Earlier passes tried a 24-hour dial with the full hourly distribution on
+ * the rim. It was arithmetically correct but consistently misread — anything
+ * circular with a hand reads as a clock, and on a clock 2 PM belongs at the
+ * "2". The form now matches that instinct, and the AM/PM a 12-hour face
+ * can't express is carried by the label beside it.
  */
 export function PeakHourDial({ hourlyCounts }: { hourlyCounts: Record<string, number> | null | undefined }) {
-  const [nowHour, setNowHour] = useState(() => {
-    const d = new Date();
-    return d.getHours() + d.getMinutes() / 60;
-  });
+  const peakLocalHour = useMemo(() => {
+    // Buckets arrive as whole UTC hours. In a half-hour zone (IST, ACST,
+    // NPT…) one UTC hour straddles two local hours — 15:00 UTC is 20:30
+    // IST, i.e. half in the local 8 PM bucket and half in the 9 PM one.
+    // Rounding the offset to a whole hour would shove the entire count into
+    // one of them and can name the wrong peak outright, so split each
+    // bucket across the two local hours it actually overlaps.
+    const offset = -new Date().getTimezoneOffset() / 60;
+    const whole = Math.floor(offset);
+    const frac = offset - whole;
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const d = new Date();
-      setNowHour(d.getHours() + d.getMinutes() / 60);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const { spokes, peakLocalHour, max } = useMemo(() => {
-    const offsetHours = Math.round(-new Date().getTimezoneOffset() / 60);
     const local = new Array(24).fill(0) as number[];
     // hourly_counts arrives only from the 0040 migration onward — render
     // nothing rather than throwing if the deployed RPC predates it.
     for (const [utcHour, count] of Object.entries(hourlyCounts ?? {})) {
-      const idx = (((Number(utcHour) + offsetHours) % 24) + 24) % 24;
-      local[idx] += count;
+      const h = Number(utcHour);
+      const a = (((h + whole) % 24) + 24) % 24;
+      local[a] += count * (1 - frac);
+      if (frac > 0) local[(a + 1) % 24] += count * frac;
     }
+
     const maxCount = Math.max(...local, 0);
-    return { spokes: local, peakLocalHour: maxCount > 0 ? local.indexOf(maxCount) : null, max: maxCount };
+    return maxCount > 0 ? local.indexOf(maxCount) : null;
   }, [hourlyCounts]);
 
   if (peakLocalHour === null) return null;
 
   const band = bandFor(peakLocalHour);
   const BandIcon = band.icon;
-  const gapHours = (SEG_GAP_DEG / 360) * 24;
-  const [nowX, nowY] = polar(nowHour, R);
+  const turn = (peakLocalHour % 12) / 12; // 0-1 around the face from 12 o'clock
+  const arcFinal = CIRCUMFERENCE * (1 - turn);
 
   return (
     <div className="animate-stat-tile-in group relative col-span-2 flex items-center gap-5 overflow-hidden rounded-xl border border-border-subtle/60 bg-surface-2/60 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <div className="relative h-28 w-28 shrink-0">
         <svg viewBox="0 0 120 120" className="h-full w-full">
-          {spokes.map((count, hour) => {
-            const ratio = max > 0 ? count / max : 0;
-            const isPeak = hour === peakLocalHour;
-            return (
-              <path
-                key={hour}
-                d={arc(hour + gapHours / 2, hour + 1 - gapHours / 2, R)}
-                fill="none"
-                stroke={isPeak ? "var(--accent)" : "var(--muted)"}
-                strokeWidth={isPeak ? 8 : 5}
-                strokeLinecap="round"
-                opacity={count > 0 ? (isPeak ? 1 : 0.15 + ratio * 0.35) : 0.08}
-              />
-            );
-          })}
-          {/* live tick — the viewer's current hour */}
-          <circle cx={nowX} cy={nowY} r="2" fill="var(--foreground)" opacity="0.35" />
-        </svg>
+          {/* hairline ring */}
+          <circle cx={C} cy={C} r={R} fill="none" stroke="var(--border-subtle)" strokeWidth="1.5" />
 
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-bold leading-none text-foreground">{formatHour(peakLocalHour)}</span>
-        </div>
+          {/* Arc from 12 round to the peak hour. Static on purpose — a
+              keyframed draw-in overrides the inline dashoffset while it
+              runs, so a frozen timeline would erase the arc entirely. The
+              hand carries the motion; the arc just has to be right. */}
+          <circle
+            cx={C}
+            cy={C}
+            r={R}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="4"
+            strokeLinecap="round"
+            transform={`rotate(-90 ${C} ${C})`}
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={arcFinal}
+          />
+
+          {/* hand — inner group holds the true angle, outer only animates
+              toward it, so the resting position is correct either way */}
+          <g
+            className="animate-clock-hand"
+            style={
+              {
+                transformOrigin: `${C}px ${C}px`,
+                "--sweep-from": `${-turn * 360}deg`,
+              } as React.CSSProperties
+            }
+          >
+            <g style={{ transform: `rotate(${turn * 360}deg)`, transformOrigin: `${C}px ${C}px` }}>
+              <line x1={C} y1={C} x2={C} y2={C - 28} stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" />
+            </g>
+          </g>
+
+          <circle cx={C} cy={C} r="3.5" fill="var(--accent)" />
+        </svg>
       </div>
 
       <div className="min-w-0 flex-1">
@@ -119,8 +121,9 @@ export function PeakHourDial({ hourlyCounts }: { hourlyCounts: Record<string, nu
           </span>
           When they create
         </div>
-        <p className="mt-2 text-lg font-semibold leading-tight text-foreground">{band.label}</p>
-        <p className="mt-1 text-xs text-muted">peak hour, your time</p>
+        <p className="mt-2 text-2xl font-bold leading-none text-foreground">{formatHour(peakLocalHour)}</p>
+        <p className="mt-1.5 text-sm font-medium text-foreground">{band.label}</p>
+        <p className="mt-0.5 text-xs text-muted">peak hour, your time</p>
       </div>
     </div>
   );

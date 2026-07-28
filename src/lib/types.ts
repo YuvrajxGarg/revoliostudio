@@ -45,6 +45,8 @@ export interface PublicProfileStats {
   longest_streak: number;
   distinct_models: number;
   favorite_model_label: string | null;
+  /** how many generations used favorite_model_label (0041 migration) */
+  favorite_model_count: number;
   image_count: number;
   video_count: number;
   model3d_count: number;

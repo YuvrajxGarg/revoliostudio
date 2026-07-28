@@ -152,6 +152,7 @@ body {
   .animate-flame-glow,
   .animate-dial-sweep,
   .animate-bar-grow,
+  .animate-clock-hand,
   .timeline-dot-latest {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -644,6 +645,26 @@ input[type="range"].slider-thin::-moz-range-thumb {
 .animate-bar-grow {
   animation: bar-grow 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: bottom;
+}
+
+/* Peak-hour clock (PeakHourDial.tsx) — the hand and arc sweep from 12 to
+   the user's busiest hour on mount.
+   Deliberately no fill-mode and no JS trigger: the element's *resting*
+   state is already the correct final position, and these only animate
+   toward it. Gating the rendered position on a rAF/state flip (or holding
+   a `from` frame with fill-mode) leaves the clock stuck at 12 o'clock
+   whenever the animation never runs — a backgrounded tab on first paint,
+   or a frozen timeline. Wrong data beats a missed flourish. */
+@keyframes clock-hand-sweep {
+  from {
+    transform: rotate(var(--sweep-from));
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+.animate-clock-hand {
+  animation: clock-hand-sweep 1s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Hides the scroll track on horizontally-scrollable rows (e.g. StudioTabs)
