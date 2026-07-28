@@ -15,7 +15,7 @@ Meshy and 100+ other models behind one API key).
 - Every generation appears in the gallery instantly and keeps polling until done —
   you can keep generating while earlier jobs are still processing
 - Full generation history, never deleted, per user
-- Google sign-in, with an admin panel (gated to `yuvraj@revolio.in`) showing every
+- Google sign-in, with an admin panel  showing every
   user's usage broken down by model/category
 
 ## Stack
