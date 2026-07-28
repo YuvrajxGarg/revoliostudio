@@ -32,7 +32,7 @@ Meshy and 100+ other models behind one API key).
 1. Create a project at [supabase.com](https://supabase.com).
 2. In **SQL Editor**, run `supabase/migrations/0001_init.sql` — this creates the
    `profiles` / `generations` tables, RLS policies, the `media` storage bucket, and
-   the `admin_user_usage` view. It also auto-grants admin to `yuvraj@revolio.in` the
+   the `admin_user_usage` view. It also auto-grants admin to `admin@email` the
    moment that account signs in.
 3. In **Authentication -> Sign In / Providers -> Google**, enable Google and add your
    OAuth Client ID + Secret (create these in Google Cloud Console -> APIs & Services ->
@@ -73,14 +73,14 @@ build-time requirement beyond the env vars above.
 
 - `src/lib/models.ts` — the model registry. Add a new model here and it
   shows up in the composer automatically.
-- `src/lib/muapi.ts` — the generation provider's REST client (submit / poll / upload).
+- `src/lib/api.ts` — the generation provider's REST client (submit / poll / upload).
 - `src/lib/generate.ts` — shared handler that builds the request payload per model
   mode and writes the `generations` row.
 - `src/components/composer/` — the unified prompt bar (reference tray, start/end
   frame slots, @-mentions, model + settings selectors).
 - `src/components/gallery/` — the live-updating generation grid, used both inline
   on each studio page and on the full `/gallery` page.
-- `src/app/(app)/admin/` — usage dashboard, gated to `yuvraj@revolio.in`.
+- `src/app/(app)/admin/` — usage dashboard.
 
 ## Notes
 
