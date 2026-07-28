@@ -30,8 +30,13 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // `/s/<token>` is the public, no-login share page (see the 0027
   // get_shared_generation RPC) — anyone with the link can view it.
+  // `/u/<username>` is the public, no-login profile page (0032 migration).
   const isPublic =
-    path === "/login" || path.startsWith("/auth") || path === "/" || path.startsWith("/s/");
+    path === "/login" ||
+    path.startsWith("/auth") ||
+    path === "/" ||
+    path.startsWith("/s/") ||
+    path.startsWith("/u/");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

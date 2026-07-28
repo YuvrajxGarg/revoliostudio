@@ -11,6 +11,20 @@
   --muted: #ababab;
   --accent: #e85002;
   --accent-2: #f16001;
+  /* Profile activity-chart categorical trio (image/video/3d) — slots 1/2/3
+     of the dataviz skill's validated 8-hue default palette (blue/orange/
+     aqua), the only trio of that set proven CVD-safe under --pairs all in
+     both light and dark modes. Not derived from --accent: a categorical
+     series color must stay distinct from the brand accent used elsewhere
+     on the same page (buttons, streak flame, badges). */
+  --series-image: #3987e5;
+  --series-video: #d95926;
+  --series-3d: #199e70;
+  /* Decorative-only stat-tile accents (profile page) — not data-encoding
+     categorical colors, so they don't need the dataviz six-check pass;
+     picked from the same validated palette family for tonal consistency. */
+  --stat-violet: #9085e9;
+  --stat-pink: #d55181;
   --danger: #c10801;
   /* Text/icon-only uses of "danger" (error copy, delete-hover icons, badges)
      need a brighter red in dark mode than --danger itself: --danger is
@@ -39,6 +53,11 @@ html.light {
   --accent-2: #d94a02;
   --danger: #c10801;
   --danger-text: #c10801;
+  --series-image: #2a78d6;
+  --series-video: #eb6834;
+  --series-3d: #1baf7a;
+  --stat-violet: #4a3aa7;
+  --stat-pink: #e87ba4;
 }
 
 @theme inline {
@@ -52,6 +71,11 @@ html.light {
   --color-accent-2: var(--accent-2);
   --color-danger: var(--danger);
   --color-danger-text: var(--danger-text);
+  --color-series-image: var(--series-image);
+  --color-series-video: var(--series-video);
+  --color-series-3d: var(--series-3d);
+  --color-stat-violet: var(--stat-violet);
+  --color-stat-pink: var(--stat-pink);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -122,6 +146,12 @@ body {
   .animate-backdrop-in,
   .animate-generation-pop,
   .animate-icon-swap,
+  .animate-stat-tile-in,
+  .animate-contribution-cell-in,
+  .animate-flame-flicker,
+  .animate-flame-glow,
+  .animate-dial-sweep,
+  .animate-bar-grow,
   .timeline-dot-latest {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -510,6 +540,110 @@ input[type="range"].slider-thin::-moz-range-thumb {
 }
 .animate-generation-pop {
   animation: generation-pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Public profile stat tiles (UserProfileView.tsx) — a quick staggered
+   fade+rise on mount, delay set per-tile via inline style so the row reads
+   left-to-right instead of popping in all at once. */
+@keyframes stat-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-stat-tile-in {
+  animation: stat-tile-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Contribution graph (ContributionGraph.tsx) — week columns fade in on
+   mount, staggered via inline style so the calendar appears to fill in
+   left-to-right rather than flashing on at once. Deliberately opacity-only:
+   the animated element is a flex column that carries the grid's layout, and
+   a `transform: scale()` here renders the whole calendar at partial size
+   for as long as the animation sits unstarted (backgrounded tab, frozen
+   timeline), which is a layout bug rather than a missed flourish. */
+@keyframes contribution-cell-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-contribution-cell-in {
+  animation: contribution-cell-in 0.3s ease-out both;
+}
+
+/* Profile streak card (StreakCard.tsx) — a gentle continuous flicker so
+   the flame reads as alive rather than a static icon, plus a soft pulsing
+   glow behind it. Purely decorative. */
+@keyframes flame-flicker {
+  0%, 100% {
+    transform: scale(1) rotate(-2deg);
+  }
+  25% {
+    transform: scale(1.06) rotate(1deg);
+  }
+  50% {
+    transform: scale(0.97) rotate(-1deg);
+  }
+  75% {
+    transform: scale(1.03) rotate(2deg);
+  }
+}
+.animate-flame-flicker {
+  animation: flame-flicker 2.4s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+@keyframes flame-glow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.15);
+  }
+}
+.animate-flame-glow {
+  animation: flame-glow 2.4s ease-in-out infinite;
+}
+
+/* Peak-hour dial (PeakHourDial.tsx) — a slow radar sweep around the 24-hour
+   ring, so the card reads as a live instrument rather than a static chart. */
+@keyframes dial-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-dial-sweep {
+  animation: dial-sweep 8s linear infinite;
+}
+
+/* Stat-tile mini bar chart (StatVisuals.tsx) — bars grow up from the
+   baseline, staggered left-to-right. Starts at a non-zero scale so a
+   frozen/unstarted animation still leaves the bars legible rather than
+   collapsing the chart to nothing. */
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0.15);
+    opacity: 0.3;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.animate-bar-grow {
+  animation: bar-grow 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom;
 }
 
 /* Hides the scroll track on horizontally-scrollable rows (e.g. StudioTabs)

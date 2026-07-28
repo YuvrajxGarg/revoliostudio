@@ -2,13 +2,57 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { format, subDays } from "date-fns";
+import {
+  Compass,
+  Crown,
+  Film,
+  Loader2,
+  Palette,
+  Clapperboard,
+  Layers,
+  CalendarDays,
+  Sparkles,
+  Images,
+  Wand2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/Logo";
-import { Badge } from "@/components/ui/Badge";
 import { GenerationGrid } from "@/components/gallery/GenerationGrid";
 import { usePublicUserGenerations } from "@/hooks/usePublicUserGenerations";
-import { PROFILE_ROLE_LABELS, type PublicProfile } from "@/lib/types";
+import { usePublicProfileStats } from "@/hooks/usePublicProfileStats";
+import { useCountUp } from "@/hooks/useCountUp";
+import { ContributionGraph } from "@/components/profile/ContributionGraph";
+import { CategoryBreakdownBar } from "@/components/profile/CategoryBreakdownBar";
+import { StreakCard } from "@/components/profile/StreakCard";
+import { PeakHourDial } from "@/components/profile/PeakHourDial";
+import { AchievementBadges } from "@/components/profile/AchievementBadges";
+import { MiniBars, ProgressRing } from "@/components/profile/StatVisuals";
+import {
+  PROFILE_ROLE_LABELS,
+  type DailyCategoryCounts,
+  type ProfileRole,
+  type PublicProfile,
+} from "@/lib/types";
+
+/** Last 14 days of totals (with display labels) for the Generations tile's bar chart. */
+function recentDailyTotals(dailyCounts: Record<string, DailyCategoryCounts>) {
+  const today = new Date();
+  const days = Array.from({ length: 14 }, (_, i) => subDays(today, 13 - i));
+  return {
+    values: days.map((d) => dailyCounts[format(d, "yyyy-MM-dd")]?.total ?? 0),
+    labels: days.map((d) => format(d, "MMM d")),
+  };
+}
+
+const ROLE_ICONS: Record<ProfileRole, typeof Compass> = {
+  strategist: Compass,
+  designer: Palette,
+  producer: Clapperboard,
+  video_editor: Film,
+  founder: Crown,
+};
 
 /**
  * Public, no-login profile page — mirrors SharedGenerationView's public
@@ -18,6 +62,7 @@ import { PROFILE_ROLE_LABELS, type PublicProfile } from "@/lib/types";
 export function UserProfileView({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicProfile | null | undefined>(undefined);
   const { items, loading: itemsLoading, hasMore, loadMore } = usePublicUserGenerations(profile?.id ?? null);
+  const stats = usePublicProfileStats(profile?.id ?? null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -70,14 +115,95 @@ export function UserProfileView({ username }: { username: string }) {
                 {profile.username && <p className="text-sm text-muted">@{profile.username}</p>}
               </div>
               {profile.role && (
-                <Badge className="border-accent/40 bg-accent/10 text-accent">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-2/70 py-1 pl-1.5 pr-3 text-xs font-medium text-foreground">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-accent">
+                    {(() => {
+                      const RoleIcon = ROLE_ICONS[profile.role];
+                      return <RoleIcon className="h-3 w-3" />;
+                    })()}
+                  </span>
                   {PROFILE_ROLE_LABELS[profile.role]}
-                </Badge>
+                </span>
               )}
               {profile.bio && <p className="text-sm text-muted leading-relaxed">{profile.bio}</p>}
             </div>
 
+            {stats && stats.total_generations > 0 && (
+              <div className="w-full max-w-6xl rounded-2xl border border-border-subtle/60 bg-surface/40 p-5 sm:p-8">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <StreakCard current={stats.current_streak} longest={stats.longest_streak} />
+                  <PeakHourDial hourlyCounts={stats.hourly_counts} />
+
+                  <StatTile
+                    index={0}
+                    icon={Sparkles}
+                    label="Generations"
+                    value={stats.total_generations}
+                    colorVar="var(--accent)"
+                    visual={
+                      <MiniBars
+                        values={recentDailyTotals(stats.daily_counts).values}
+                        labels={recentDailyTotals(stats.daily_counts).labels}
+                        colorVar="var(--accent)"
+                      />
+                    }
+                    caption="last 14 days"
+                  />
+                  <StatTile
+                    index={1}
+                    icon={CalendarDays}
+                    label="Active days"
+                    value={stats.active_days}
+                    colorVar="var(--series-image)"
+                    ring={stats.active_days / 365}
+                    caption="days created on"
+                  />
+                  <StatTile
+                    index={2}
+                    icon={Layers}
+                    label="Models used"
+                    value={stats.distinct_models}
+                    colorVar="var(--series-3d)"
+                    ring={stats.distinct_models / 40}
+                    caption="of 40+ available"
+                  />
+                  <StatTile
+                    index={3}
+                    icon={Wand2}
+                    label="Favorite model"
+                    value={stats.favorite_model_label ?? "—"}
+                    isText
+                    colorVar="var(--stat-pink)"
+                    caption="most reached for"
+                  />
+                </div>
+
+                <div className="my-6 h-px bg-border-subtle/60" />
+
+                <AchievementBadges stats={stats} />
+
+                <div className="my-6 h-px bg-border-subtle/60" />
+
+                <CategoryBreakdownBar
+                  imageCount={stats.image_count}
+                  videoCount={stats.video_count}
+                  model3dCount={stats.model3d_count}
+                />
+
+                <div className="my-6 h-px bg-border-subtle/60" />
+
+                <ContributionGraph dailyCounts={stats.daily_counts} />
+              </div>
+            )}
+
             <div className="w-full max-w-6xl">
+              <div className="mb-4 flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 text-accent">
+                  <Images className="h-3.5 w-3.5" />
+                </span>
+                <h2 className="text-base font-semibold text-foreground">Published generations</h2>
+                {items.length > 0 && <span className="text-sm text-muted">({items.length}{hasMore ? "+" : ""})</span>}
+              </div>
               <GenerationGrid
                 items={items}
                 loading={itemsLoading}
@@ -90,6 +216,84 @@ export function UserProfileView({ username }: { username: string }) {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function StatTile({
+  index,
+  icon: Icon,
+  label,
+  value,
+  suffix,
+  isText,
+  className,
+  colorVar = "var(--accent)",
+  visual,
+  ring,
+  caption,
+}: {
+  index: number;
+  icon: typeof Sparkles;
+  label: string;
+  value: string | number;
+  suffix?: string;
+  isText?: boolean;
+  className?: string;
+  colorVar?: string;
+  /** optional sparkline (or similar) rendered under the value */
+  visual?: React.ReactNode;
+  /** 0-1 — swaps the icon chip for a progress ring wrapping the icon */
+  ring?: number;
+  caption?: string;
+}) {
+  const animatedValue = useCountUp(typeof value === "number" ? value : 0);
+
+  return (
+    <div
+      className={cn(
+        "animate-stat-tile-in group relative flex flex-col gap-2 overflow-hidden rounded-xl border border-border-subtle/60 bg-surface-2/60 p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg",
+        className
+      )}
+      style={{ animationDelay: `${index * 40}ms`, ["--tile-color" as string]: colorVar }}
+    >
+      {/* soft tint that blooms in on hover, tinted to the tile's own color */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        style={{ background: "radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--tile-color) 12%, transparent), transparent 70%)" }}
+      />
+
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] text-muted">{label}</p>
+          <p
+            className={cn(
+              "mt-1 font-semibold text-foreground",
+              isText ? "line-clamp-2 text-sm leading-snug" : "text-2xl leading-none"
+            )}
+            title={isText ? String(value) : undefined}
+          >
+            {isText ? value : animatedValue}
+            {suffix ?? ""}
+          </p>
+        </div>
+
+        {ring !== undefined ? (
+          <ProgressRing progress={ring} colorVar={colorVar}>
+            <Icon className="h-3.5 w-3.5" style={{ color: colorVar }} />
+          </ProgressRing>
+        ) : (
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110"
+            style={{ backgroundColor: "color-mix(in srgb, var(--tile-color) 16%, transparent)", color: "var(--tile-color)" }}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+        )}
+      </div>
+
+      {visual && <div className="relative">{visual}</div>}
+      {caption && <p className="relative text-[10px] text-muted/80">{caption}</p>}
     </div>
   );
 }

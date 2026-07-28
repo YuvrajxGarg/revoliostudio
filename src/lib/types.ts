@@ -24,6 +24,38 @@ export interface PublicProfile {
   created_at: string;
 }
 
+/**
+ * Aggregate-only activity stats for a public profile, returned by the
+ * get_public_profile_stats RPC (0038 migration). Counts every generation
+ * (not just published ones) the same way GitHub's contribution graph counts
+ * private-repo commits — activity volume only, never prompts/images/models
+ * tied to a specific day.
+ */
+export interface DailyCategoryCounts {
+  total: number;
+  image: number;
+  video: number;
+  "3d": number;
+}
+
+export interface PublicProfileStats {
+  total_generations: number;
+  active_days: number;
+  current_streak: number;
+  longest_streak: number;
+  distinct_models: number;
+  favorite_model_label: string | null;
+  image_count: number;
+  video_count: number;
+  model3d_count: number;
+  /** hour of day (0-23, UTC) with the most generations, or null with no activity */
+  peak_hour_utc: number | null;
+  /** hour of day (0-23, UTC, as a string key) -> generation count */
+  hourly_counts: Record<string, number>;
+  /** date (YYYY-MM-DD, UTC) -> per-category counts, last ~371 days only */
+  daily_counts: Record<string, DailyCategoryCounts>;
+}
+
 export interface Generation {
   id: string;
   user_id: string;
