@@ -18,6 +18,7 @@ import {
   Maximize2,
   Package,
   PenTool,
+  SlidersHorizontal,
   Sticker,
   Sun,
   Type,
@@ -61,6 +62,7 @@ export const TOOL_ICON_MAP: Record<string, React.ComponentType<{ className?: str
   Bot,
   SquarePlay,
   Workflow,
+  SlidersHorizontal,
 };
 
 export function resolveToolIcon(name: string): React.ComponentType<{ className?: string }> {

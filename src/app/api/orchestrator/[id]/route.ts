@@ -36,17 +36,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 /**
- * Discard a proposed (not-yet-run) batch of steps. For a brand-new thread
- * where nothing has ever run, this deletes the whole thread — same as
- * before. For a follow-up on a thread that already has completed/running
- * history, deleting the whole row would throw away real generations'
- * context, so instead this trims off just the trailing pending steps (and
- * the message that introduced them) and leaves the rest of the thread
- * exactly as it was, dropping status back to whatever it was after the last
- * completed batch.
+ * Discard a proposed (not-yet-run) batch of steps, OR (with `?force=true`)
+ * hard-delete the whole chat regardless of history — the Chats rail's own
+ * per-row/multi-select "Delete" actions use the force path, since a user
+ * deleting a finished chat from the sidebar means exactly that, unlike
+ * PlanTurn's "Discard" button which only ever means "throw away this
+ * still-pending proposal". Without `force`, a brand-new thread where nothing
+ * has ever run gets deleted outright — same as before. For a follow-up on a
+ * thread that already has completed/running history, deleting the whole row
+ * would throw away real generations' context, so instead this trims off just
+ * the trailing pending steps (and the message that introduced them) and
+ * leaves the rest of the thread exactly as it was, dropping status back to
+ * whatever it was after the last completed batch.
  */
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const force = new URL(request.url).searchParams.get("force") === "true";
   const supabase = await createClient();
   const {
     data: { user },
@@ -63,7 +68,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const run = row as OrchestratorRun;
 
   const hasHistory = run.plan.some((s) => s.status !== "pending");
-  if (!hasHistory) {
+  if (force || !hasHistory) {
     const { error } = await supabase.from("orchestrator_runs").delete().eq("id", id).eq("user_id", user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, deleted: true });

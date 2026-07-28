@@ -33,12 +33,15 @@ export function AutopilotReferencePicker({
   onAdd,
   onRemove,
   onTagChange,
+  onBrowseAll,
   max = 4,
 }: {
   references: AutopilotReference[];
   onAdd: (url: string) => void;
   onRemove: (id: string) => void;
   onTagChange: (id: string, tag: string) => void;
+  /** Opens the full Assets modal (Uploads/Image/Video/Liked) in pick mode — the last-16 grid below is just a quick shortlist. */
+  onBrowseAll?: () => void;
   max?: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -181,7 +184,20 @@ export function AutopilotReferencePicker({
                 }}
               />
 
-              <div className="text-[10px] uppercase tracking-wide text-muted px-0.5">From your Library</div>
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted">From your Library</span>
+                {onBrowseAll && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      onBrowseAll();
+                    }}
+                    className="text-[10px] text-accent hover:underline"
+                  >
+                    Browse all
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
                 {items
                   .filter((g) => g.category === "image" && g.status === "completed" && g.thumbnail_url)

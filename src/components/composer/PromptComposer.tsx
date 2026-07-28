@@ -432,6 +432,11 @@ export function PromptComposer({
   function handleReferencePick(result: ReferencePickResult) {
     if (result.type === "image") {
       addReference(result.url, result.name, maxRefs || 4, result.category, result.promptModifier);
+      // A saved character's own generated shots ride along automatically —
+      // addReference already no-ops past maxRefs and dedupes by url, so this
+      // just fills in as many extra angles/poses as the model's reference
+      // cap still has room for.
+      result.extraUrls?.forEach((url, i) => addReference(url, `${result.name} ${i + 2}`, maxRefs || 4, result.category));
     } else {
       setPrompt(prompt.trim() ? `${prompt.trim()}, ${result.text}` : result.text);
     }

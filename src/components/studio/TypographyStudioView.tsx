@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ArrowUp, Check, Loader2, Palette, Plus, Type, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUp, Check, ChevronLeft, Loader2, Palette, Plus, Type, X } from "lucide-react";
 import { uploadReferenceFile } from "@/lib/upload";
 import { cn } from "@/lib/utils";
 import { formatErrorMessage } from "@/lib/errorFormat";
@@ -48,6 +49,7 @@ function buildPrompt(text: string, transparent: boolean, colorOverride: string |
 }
 
 export function TypographyStudioView() {
+  const router = useRouter();
   const [refs, setRefs] = useState<{ id: string; url: string }[]>([]);
   const [refUploading, setRefUploading] = useState(false);
   const [text, setText] = useState("");
@@ -123,18 +125,36 @@ export function TypographyStudioView() {
   }
 
   return (
-    <div className="flex-1 flex min-h-0 gap-3 px-3 pb-3 pt-3">
-      <aside className="hidden lg:flex w-[320px] shrink-0 flex-col gap-4 rounded-2xl border border-border-subtle/60 bg-surface/50 backdrop-blur-md shadow-lg overflow-y-auto p-4">
-        <div>
-          <h1 className="text-sm font-semibold flex items-center gap-1.5">
-            <Type className="h-4 w-4" /> Typography Generator
-          </h1>
-          <p className="mt-1 text-xs text-muted leading-relaxed">
-            Upload one or more images of a text/lettering style you like, type the words you want, and get a PNG
-            rendered in that exact font, color and effect.
-          </p>
+    <div className="flex-1 flex flex-col min-h-0 gap-4 px-3 pb-3 pt-3">
+      {/* Banner header — Community-style: icon chip + title + tagline,
+          centered to the same max-width the two-panel body below uses. */}
+      <div className="mx-auto w-full max-w-6xl shrink-0">
+        <div className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-surface p-5 md:p-6">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+            <Type className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold tracking-tight">Typography Generator</h1>
+            <p className="mt-0.5 truncate text-xs text-muted">
+              Upload a lettering style, type your text, get a PNG rendered to match
+            </p>
+          </div>
         </div>
+      </div>
 
+      <div className="mx-auto flex w-full max-w-6xl min-h-0 flex-1 gap-4">
+      <aside className="hidden lg:flex w-[320px] shrink-0 flex-col rounded-2xl border border-border-subtle/60 bg-surface/50 backdrop-blur-md shadow-lg overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border-subtle/60 p-3.5 shrink-0">
+          <button
+            onClick={() => router.push("/home")}
+            title="Back to Home"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-xs font-medium text-muted">Back to Home</span>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         <div>
           <div className="panel-label mb-1.5">Style reference(s)</div>
           <div className="flex flex-wrap items-center gap-2">
@@ -265,19 +285,18 @@ export function TypographyStudioView() {
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
           {busy ? "Submitting…" : "Generate"}
         </button>
+        </div>
       </aside>
 
       {/* Main stage — this tool's own gallery, scoped to tool_id "typography"
           (see TOOL_ID above), same pattern as every other tool studio's
-          gallery instead of a single one-shot preview. */}
+          gallery instead of a single one-shot preview. Icon/title dropped
+          from this header (now redundant with the banner above). */}
       <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
-          <div className="flex items-center gap-1.5 text-sm font-medium">
-            <Type className="h-4 w-4 text-muted" /> Typography Generator
-          </div>
+        <div className="flex items-center justify-end px-5 md:px-6 py-3.5 border-b border-border-subtle/60 shrink-0">
           {items.length > 0 && <GridSizeSlider value={colWidth} onChange={setColWidth} />}
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-5">
           <GenerationGrid
             items={items}
             loading={loading}
@@ -288,6 +307,7 @@ export function TypographyStudioView() {
             columnWidth={colWidth}
           />
         </div>
+      </div>
       </div>
 
       {viewingUrl && <ImageLightbox url={viewingUrl} onClose={() => setViewingUrl(null)} />}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUp,
   Bot,
   Check,
   Clapperboard,
+  Images,
   Image as ImageIcon,
   Loader2,
   MessageCircle,
@@ -19,16 +20,26 @@ import {
   Zap,
 } from "lucide-react";
 import { SaveFlowModal } from "@/components/flows/SaveFlowModal";
+import { RunFlowModal } from "@/components/flows/RunFlowModal";
 import { formatCostUSD, formatCostINR } from "@/lib/pricing";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { cn } from "@/lib/utils";
 import { useGenerations } from "@/hooks/useGenerations";
+import { useFlows } from "@/hooks/useFlows";
 import { GenerationGrid } from "@/components/gallery/GenerationGrid";
 import { DEFAULT_LLM_MODEL } from "@/lib/llmModels";
 import { LlmModelSelector } from "@/components/studio/LlmModelSelector";
 import { AutopilotReferencePicker, type AutopilotReference } from "@/components/studio/AutopilotReferencePicker";
+import { PilotComposerMenu } from "@/components/studio/PilotComposerMenu";
+import { FlowPickerModal } from "@/components/studio/FlowPickerModal";
+import { AssetsModal } from "@/components/studio/AssetsModal";
+import { ReferencePicker, type ReferencePickResult } from "@/components/composer/ReferencePicker";
+import type { RefCategory } from "@/hooks/useCuratedReferences";
+import { pickGreeting } from "@/lib/greetings";
 import type { OrchestratorMessage, OrchestratorMode, OrchestratorRun, OrchestratorStep } from "@/lib/orchestrator-types";
+import type { Flow } from "@/lib/flow-types";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -292,18 +303,65 @@ function ModeToggle({ value, onChange, disabled }: { value: OrchestratorMode; on
  * scoped to just this planning/execution core — no Skills marketplace,
  * memory, scheduling, or external connectors.
  */
-export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }) {
+export function AutopilotView({
+  canSaveFlow = false,
+  canUseFlows = false,
+  displayName = null,
+  email = "",
+}: {
+  canSaveFlow?: boolean;
+  /** Gates every Flow-related entry point added in this revamp (composer's "Use a Flow", the landing screen's Flows quick-starts) — Flows itself is still an admin-only beta feature everywhere else in the app (see /flows), so this mirrors that instead of quietly opening it up. */
+  canUseFlows?: boolean;
+  displayName?: string | null;
+  email?: string;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<OrchestratorMode>("autopilot");
   const [saveFlowOpen, setSaveFlowOpen] = useState(false);
   const [brief, setBrief] = useState("");
   const [references, setReferences] = useState<AutopilotReference[]>([]);
+  // "+" menu entry points — Elements opens the shared studio ReferencePicker,
+  // Use a Flow opens a search/pick list then hands off to the existing
+  // RunFlowModal (same run path FlowsView itself uses). Assets has two
+  // instances: pick mode (opened from the "@" popover's "Browse all", adds
+  // straight to `references`) and browse mode (opened from the in-thread
+  // header, just for looking around).
+  const [referencePickerCategory, setReferencePickerCategory] = useState<RefCategory | null>(null);
+  const [flowPickerOpen, setFlowPickerOpen] = useState(false);
+  const [runFlow, setRunFlow] = useState<Flow | null>(null);
+  const [assetsBrowseOpen, setAssetsBrowseOpen] = useState(false);
+  const [assetsPickOpen, setAssetsPickOpen] = useState(false);
+  const [quickTab, setQuickTab] = useState<"examples" | "flows">("examples");
+  const firstName = (displayName || email.split("@")[0] || "").split(" ")[0];
+  // Picked after mount, not during render — same SSR/hydration-mismatch
+  // reasoning as HomeDashboard's own greeting (server and browser can
+  // disagree on "what hour is it", and Math.random() during the initial
+  // render would pick a different line server vs client).
+  const [greetingLine, setGreetingLine] = useState<string | null>(null);
+  useEffect(() => setGreetingLine(pickGreeting(new Date().getHours(), firstName)), [firstName]);
+  // Quick-starts' Flows tab data — fetched unconditionally (same as
+  // FlowsView.tsx's own "mine"+"public" pair), just never rendered unless
+  // canUseFlows is true.
+  const mineFlows = useFlows("mine");
+  const publicFlows = useFlows("public");
+  const quickStartFlows = useMemo(
+    () => (canUseFlows ? [...mineFlows.flows, ...publicFlows.flows].slice(0, 6) : []),
+    [canUseFlows, mineFlows.flows, publicFlows.flows]
+  );
   const [llmModel, setLlmModel] = useState(DEFAULT_LLM_MODEL);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<OrchestratorRun | null>(null);
   const [history, setHistory] = useState<OrchestratorRun[]>([]);
+  // Chats rail delete/multi-select — selectMode toggles each row between
+  // "click opens the chat" and "click toggles a checkbox", entirely
+  // independent of which chat (if any) is currently open.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteRun, setConfirmDeleteRun] = useState<OrchestratorRun | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [deletingRuns, setDeletingRuns] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
   // Optimistic view of the message just sent on an existing thread — shown
   // immediately (with a "Pilot is thinking…" bubble below it) instead of
@@ -393,14 +451,42 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
     };
   }, [activeRun, loadHistory]);
 
-  function addReference(url: string) {
-    setReferences((prev) => [...prev, { id: crypto.randomUUID(), url }]);
+  // 4 is the same cap AutopilotReferencePicker's own "@" popover enforces
+  // (its default `max` prop) — checked here too now that Elements, the "+"
+  // menu's upload, and the Assets picker are all additional entry points
+  // that don't go through that popover's own disabled-at-limit button.
+  function addReference(url: string, tag?: string) {
+    setReferences((prev) => (prev.length >= 4 ? prev : [...prev, { id: crypto.randomUUID(), url, tag }]));
   }
   function removeReference(id: string) {
     setReferences((prev) => prev.filter((r) => r.id !== id));
   }
   function updateReferenceTag(id: string, tag: string) {
     setReferences((prev) => prev.map((r) => (r.id === id ? { ...r, tag } : r)));
+  }
+
+  // Same split PromptComposer.tsx's own handleReferencePick uses: an image
+  // pick becomes another attached reference (its Element/Style/etc name
+  // doubles as the tag Pilot's planner uses to tell multiple images apart —
+  // see AutopilotReference's own doc comment), a Camera/Effects/Color tag
+  // just appends its phrase to the brief text instead.
+  function handleReferencePick(result: ReferencePickResult) {
+    if (result.type === "image") {
+      addReference(result.url, result.name);
+      // Same treatment as PromptComposer's handleReferencePick — a saved
+      // character's own generated shots ride along so Pilot has several
+      // consistent angles to plan steps from, not just the one source photo.
+      result.extraUrls?.forEach((url, i) => addReference(url, `${result.name} ${i + 2}`));
+    } else {
+      setBrief((prev) => (prev.trim() ? `${prev.trim()}, ${result.text}` : result.text));
+    }
+    // Deliberately doesn't close the picker — same as PromptComposer, it stays
+    // open so you can stack a Style + Location + Camera tag in one session.
+  }
+
+  function handleFlowPick(flow: Flow) {
+    setFlowPickerOpen(false);
+    setRunFlow(flow);
   }
 
   async function handleSend() {
@@ -515,6 +601,51 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
     setPendingTurn(null);
   }
 
+  function toggleSelectMode() {
+    setSelectMode((v) => !v);
+    setSelectedRunIds(new Set());
+  }
+
+  function toggleSelectRun(id: string) {
+    setSelectedRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Hard-delete regardless of history — distinct from handleDiscard, which
+  // only ever throws away a still-pending proposal on the currently open
+  // thread (see the API route's own doc comment for the split).
+  async function hardDeleteRun(id: string) {
+    await fetch(`/api/orchestrator/${id}?force=true`, { method: "DELETE" });
+    setHistory((prev) => prev.filter((r) => r.id !== id));
+    if (activeRun?.id === id) startNewChat();
+  }
+
+  async function confirmSingleRunDelete() {
+    if (!confirmDeleteRun || deletingRuns) return;
+    setDeletingRuns(true);
+    await hardDeleteRun(confirmDeleteRun.id);
+    setDeletingRuns(false);
+    setConfirmDeleteRun(null);
+  }
+
+  async function confirmBulkRunDelete() {
+    if (deletingRuns) return;
+    setDeletingRuns(true);
+    // Sequential, same reasoning as GenerationGrid's own bulk delete — avoids
+    // bursting the endpoint with a pile of concurrent requests.
+    for (const id of selectedRunIds) {
+      await hardDeleteRun(id);
+    }
+    setDeletingRuns(false);
+    setConfirmBulkDelete(false);
+    setSelectMode(false);
+    setSelectedRunIds(new Set());
+  }
+
   const isAutopilot = (activeRun?.mode ?? mode) === "autopilot";
   const composerDisabled = planning || busyAction || activeRun?.status === "running";
   // A brand-new thread has no activeRun yet the moment Send is pressed — the
@@ -549,22 +680,60 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
         >
           <MessageSquarePlus className="h-3.5 w-3.5" /> New chat
         </button>
-        <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Chats</div>
+        <div className="px-3 pb-1.5 flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Chats</span>
+          {history.length > 0 && (
+            <button onClick={toggleSelectMode} className="text-[10px] text-muted hover:text-foreground transition-colors">
+              {selectMode ? "Cancel" : "Select"}
+            </button>
+          )}
+        </div>
+        {selectMode && (
+          <div className="px-3 pb-1.5 flex items-center justify-between gap-1.5">
+            <span className="text-[10px] text-muted">{selectedRunIds.size} selected</span>
+            <button
+              onClick={() => selectedRunIds.size > 0 && setConfirmBulkDelete(true)}
+              disabled={selectedRunIds.size === 0}
+              className="flex items-center gap-1 rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-[10px] font-medium text-danger-text hover:bg-danger/20 disabled:opacity-40 transition-colors"
+            >
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto px-2 pb-2 flex flex-col gap-1">
           {history.length === 0 && <p className="px-1.5 py-4 text-xs text-muted text-center">Nothing yet.</p>}
           {history.map((run) => {
             const ModeIcon = MODE_META[run.mode ?? "autopilot"].icon;
+            const selected = selectedRunIds.has(run.id);
             return (
-              <button
+              <div
                 key={run.id}
-                onClick={() => setActiveRun(run)}
+                role="button"
+                tabIndex={0}
+                onClick={() => (selectMode ? toggleSelectRun(run.id) : setActiveRun(run))}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  if (selectMode) toggleSelectRun(run.id);
+                  else setActiveRun(run);
+                }}
                 className={cn(
-                  "flex items-start gap-1.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                  activeRun?.id === run.id ? "bg-surface-2" : "hover:bg-surface-2/60"
+                  "group flex items-start gap-1.5 rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer",
+                  selectMode ? selected && "bg-accent/10" : activeRun?.id === run.id ? "bg-surface-2" : "hover:bg-surface-2/60"
                 )}
               >
-                <ModeIcon className="h-3 w-3 mt-0.5 shrink-0 text-muted" />
-                <div className="min-w-0 flex flex-col gap-0.5">
+                {selectMode ? (
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border",
+                      selected ? "border-accent bg-accent" : "border-border-subtle"
+                    )}
+                  >
+                    {selected && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                ) : (
+                  <ModeIcon className="h-3 w-3 mt-0.5 shrink-0 text-muted" />
+                )}
+                <div className="min-w-0 flex flex-1 flex-col gap-0.5">
                   <span className="text-xs truncate">{run.title || run.brief}</span>
                   <span
                     className={cn(
@@ -578,7 +747,19 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
                     {run.status.replace("_", " ")}
                   </span>
                 </div>
-              </button>
+                {!selectMode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteRun(run);
+                    }}
+                    title="Delete chat"
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted opacity-0 transition-opacity hover:bg-danger/20 hover:text-danger-text group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -587,21 +768,32 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
       {/* Conversation */}
       <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
         {!showConversation ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
+          <div className="flex-1 overflow-y-auto flex flex-col items-center gap-6 px-4 py-8">
             <div className="text-center">
               <h1 className="flex items-center justify-center gap-1.5 text-xl font-semibold">
-                <Bot className="h-5 w-5 text-accent" /> What can Pilot help with today?
+                <Bot className="h-5 w-5 text-accent" />
+                {greetingLine ?? "What can Pilot help with today?"}
               </h1>
               <p className="mt-1.5 text-sm text-muted leading-relaxed max-w-md">{MODE_META[mode].blurb}</p>
             </div>
             <ModeToggle value={mode} onChange={setMode} />
             <div className="w-full max-w-xl rounded-2xl border border-border-subtle bg-surface p-3 flex flex-col gap-2">
-              <AutopilotReferencePicker
-                references={references}
-                onAdd={addReference}
-                onRemove={removeReference}
-                onTagChange={updateReferenceTag}
-              />
+              <div className="flex items-center gap-1.5">
+                <AutopilotReferencePicker
+                  references={references}
+                  onAdd={addReference}
+                  onRemove={removeReference}
+                  onTagChange={updateReferenceTag}
+                  onBrowseAll={() => setAssetsPickOpen(true)}
+                />
+                <PilotComposerMenu
+                  onUpload={addReference}
+                  onOpenElements={() => setReferencePickerCategory("style")}
+                  onOpenFlowPicker={() => setFlowPickerOpen(true)}
+                  canUseFlows={canUseFlows}
+                  disabled={planning}
+                />
+              </div>
               <textarea
                 ref={briefTextareaRef}
                 value={brief}
@@ -632,19 +824,74 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
                   {planning ? (mode === "autopilot" ? "Planning…" : "Thinking…") : mode === "autopilot" ? "Plan it" : "Send"}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {EXAMPLE_BRIEFS[mode].map((ex) => (
-                  <button
-                    key={ex}
-                    onClick={() => setBrief(ex)}
-                    disabled={planning}
-                    className="rounded-full border border-border-subtle bg-surface-2 px-2.5 py-1 text-[11px] text-muted hover:text-foreground hover:border-accent/40 transition-colors disabled:opacity-50"
-                  >
-                    {ex.length > 46 ? `${ex.slice(0, 43)}…` : ex}
-                  </button>
-                ))}
-              </div>
               {error && <div className="text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
+            </div>
+
+            {/* Quick starts — Higgsfield's feature-tile grid, scoped to what
+                Pilot can actually do: upgraded example briefs, plus (admins
+                only, since Flows itself is still admin-gated) a Flow you
+                already have or can run from the community. */}
+            <div className="w-full max-w-3xl flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium text-muted">Quick starts</h2>
+                {canUseFlows && quickStartFlows.length > 0 && (
+                  <div className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-2 p-1">
+                    {(["examples", "flows"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setQuickTab(t)}
+                        className={cn(
+                          "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                          quickTab === t ? "bg-surface text-foreground" : "text-muted hover:text-foreground"
+                        )}
+                      >
+                        {t === "examples" ? "Examples" : "Flows"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {quickTab === "flows" && canUseFlows && quickStartFlows.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {quickStartFlows.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setRunFlow(f)}
+                      className="flex flex-col gap-1.5 rounded-2xl border border-border-subtle bg-surface p-3 text-left transition-colors hover:border-accent/50"
+                    >
+                      <div className="flex items-center gap-1.5 text-sm font-medium truncate">
+                        <Workflow className="h-3.5 w-3.5 text-accent shrink-0" /> {f.name}
+                      </div>
+                      <p className="text-xs text-muted line-clamp-2">
+                        {f.description || `${f.steps.length} step${f.steps.length === 1 ? "" : "s"}`}
+                      </p>
+                      <span className="text-[10px] text-muted">
+                        {f.run_count} run{f.run_count === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {EXAMPLE_BRIEFS[mode].map((ex) => {
+                    const ExampleIcon = MODE_META[mode].icon;
+                    return (
+                      <button
+                        key={ex}
+                        onClick={() => setBrief(ex)}
+                        disabled={planning}
+                        className="flex items-start gap-2.5 rounded-2xl border border-border-subtle bg-surface p-3 text-left transition-colors hover:border-accent/50 disabled:opacity-50"
+                      >
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                          <ExampleIcon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="text-xs text-foreground/90 leading-relaxed">{ex}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -686,6 +933,13 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
                     <Trash2 className="h-3 w-3" /> Library
                   </button>
                 )}
+                <button
+                  onClick={() => setAssetsBrowseOpen(true)}
+                  title="Browse your assets"
+                  className="flex items-center gap-1 rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-1 text-[11px] font-medium hover:bg-border-subtle transition-colors"
+                >
+                  <Images className="h-3 w-3" /> Assets
+                </button>
               </div>
             </div>
 
@@ -718,12 +972,22 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
 
             <div className="px-4 md:px-6 pb-4 pt-2 shrink-0">
               <div className="rounded-2xl border border-border-subtle bg-surface p-3 flex flex-col gap-2">
-                <AutopilotReferencePicker
-                  references={references}
-                  onAdd={addReference}
-                  onRemove={removeReference}
-                  onTagChange={updateReferenceTag}
-                />
+                <div className="flex items-center gap-1.5">
+                  <AutopilotReferencePicker
+                    references={references}
+                    onAdd={addReference}
+                    onRemove={removeReference}
+                    onTagChange={updateReferenceTag}
+                    onBrowseAll={() => setAssetsPickOpen(true)}
+                  />
+                  <PilotComposerMenu
+                    onUpload={addReference}
+                    onOpenElements={() => setReferencePickerCategory("style")}
+                    onOpenFlowPicker={() => setFlowPickerOpen(true)}
+                    canUseFlows={canUseFlows}
+                    disabled={composerDisabled}
+                  />
+                </div>
                 <textarea
                   ref={briefTextareaRef}
                   value={brief}
@@ -775,6 +1039,52 @@ export function AutopilotView({ canSaveFlow = false }: { canSaveFlow?: boolean }
             setSaveFlowOpen(false);
             router.push("/flows");
           }}
+        />
+      )}
+
+      {referencePickerCategory && (
+        <ReferencePicker
+          initialCategory={referencePickerCategory}
+          onApply={handleReferencePick}
+          onClose={() => setReferencePickerCategory(null)}
+        />
+      )}
+      {flowPickerOpen && <FlowPickerModal onPick={handleFlowPick} onClose={() => setFlowPickerOpen(false)} />}
+      {/* RunFlowModal already POSTs to /api/flows/[id]/run and routes to
+          /autopilot?run=<id> itself — same path FlowsView's own "Run" button
+          uses, so picking a flow here behaves identically. */}
+      {runFlow && <RunFlowModal flow={runFlow} onClose={() => setRunFlow(null)} />}
+      {assetsBrowseOpen && <AssetsModal onClose={() => setAssetsBrowseOpen(false)} />}
+      {assetsPickOpen && (
+        <AssetsModal
+          onPick={(url) => {
+            addReference(url);
+            setAssetsPickOpen(false);
+          }}
+          onClose={() => setAssetsPickOpen(false)}
+        />
+      )}
+
+      {confirmDeleteRun && (
+        <ConfirmModal
+          title={`Delete "${confirmDeleteRun.title || confirmDeleteRun.brief}"?`}
+          description="This can't be undone."
+          confirmLabel="Delete"
+          danger
+          loading={deletingRuns}
+          onConfirm={confirmSingleRunDelete}
+          onCancel={() => setConfirmDeleteRun(null)}
+        />
+      )}
+      {confirmBulkDelete && (
+        <ConfirmModal
+          title={`Delete ${selectedRunIds.size} chat${selectedRunIds.size === 1 ? "" : "s"}?`}
+          description="This can't be undone."
+          confirmLabel="Delete"
+          danger
+          loading={deletingRuns}
+          onConfirm={confirmBulkRunDelete}
+          onCancel={() => setConfirmBulkDelete(false)}
         />
       )}
     </div>

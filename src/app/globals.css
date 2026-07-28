@@ -52,9 +52,9 @@ html.light {
   --color-accent-2: var(--accent-2);
   --color-danger: var(--danger);
   --color-danger-text: var(--danger-text);
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-display: var(--font-schibsted), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   --animate-cell-ripple: cell-ripple var(--duration, 200ms) ease-out none 1 var(--delay, 0ms);
 
@@ -371,6 +371,29 @@ input[type="range"].slider-thin::-moz-range-thumb {
 }
 .animate-menu-pop-in {
   animation: menu-pop-in 0.15s ease-out both;
+}
+
+/* Character Sheet's face-scan overlay (FaceScanOverlay.tsx) — a sweeping
+   horizontal line while the vision-LLM metadata call is in flight. Purely
+   decorative, not tied to any real per-pixel detection. */
+@keyframes scan-line {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+.animate-scan-line {
+  animation: scan-line 1.8s ease-in-out infinite;
 }
 
 /* Centered modal entrance — the backdrop fades in while the panel itself

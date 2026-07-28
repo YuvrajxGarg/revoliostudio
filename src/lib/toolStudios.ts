@@ -57,30 +57,11 @@ export interface ToolStudioConfig {
 }
 
 export const TOOL_STUDIOS: ToolStudioConfig[] = [
-  {
-    id: "character",
-    title: "Character Studio",
-    icon: "UserRound",
-    description:
-      "Upload a face once, then generate that same person in new scenes, outfits, and poses — the identity stays consistent across every result.",
-    tabs: [
-      {
-        id: "image",
-        label: "Image",
-        category: "image",
-        modelIds: ["flux-pulid"],
-        referenceHint: "One clear, well-lit photo of the face — front-facing works best.",
-      },
-    ],
-    emptyLabel: "No characters yet — upload a face and describe a new scene, outfit, or pose.",
-    promptPlaceholder:
-      "Describe the new scene — e.g. \"astronaut floating in space, cinematic lighting\" or \"wearing a red leather jacket, city street at night\"…",
-    // flux-pulid's whole job is identity consistency — but consistency of a
-    // face that's already come out over-smoothed just reproduces the same
-    // plastic look in every new scene. Appending this doesn't touch the
-    // user's own creative direction, only the skin-texture failure mode.
-    promptTransform: (prompt) => `${prompt.trim()} ${PHOTOREAL_SKIN}`,
-  },
+  // "character" used to live here (flux-pulid, generic PromptComposer) —
+  // /studio/character is now the fully bespoke CharacterStudioView (the
+  // Character Sheet feature: one photo -> a vision-LLM metadata card + 24
+  // consistent-character shots composited into one poster), which doesn't
+  // route through ToolStudioView at all, so this config entry is dead.
   {
     id: "headshot",
     title: "Headshot Studio",

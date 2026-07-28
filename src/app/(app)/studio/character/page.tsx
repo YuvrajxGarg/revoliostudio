@@ -1,5 +1,5 @@
-import { ToolStudioView } from "@/components/studio/ToolStudioView";
+import { CharacterStudioView } from "@/components/studio/character/CharacterStudioView";
 
 export default function CharacterStudioPage() {
-  return <ToolStudioView toolId="character" />;
+  return <CharacterStudioView />;
 }

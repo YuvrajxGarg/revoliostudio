@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, LayoutTemplate, Search, Trash2, Upload, Image as ImageIcon } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, LayoutTemplate, Search, Sparkles, Trash2, Upload, Image as ImageIcon, Images } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadReferenceFile } from "@/lib/upload";
 import { useCuratedReferences, type RefCategory, type ImageRefCategory } from "@/hooks/useCuratedReferences";
@@ -11,9 +12,21 @@ import { IMAGE_CATEGORIES, TAG_CATEGORIES } from "@/components/composer/Referenc
 import { CAMERA_TAGS, EFFECT_TAGS, COLOR_PALETTES } from "@/lib/referenceTags";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { CharacterShotsModal } from "@/components/library/CharacterShotsModal";
 
 function isImageCategory(c: RefCategory): c is ImageRefCategory {
   return c === "style" || c === "character" || c === "location" || c === "element";
+}
+
+const ALL_CATEGORIES: RefCategory[] = [...IMAGE_CATEGORIES.map((c) => c.id), ...TAG_CATEGORIES.map((c) => c.id)];
+
+/** Deep-link support — e.g. Character Sheet's "View in Library" link sends
+ * people straight to `/library?category=character` instead of always
+ * landing on the default Style tab. Falls back to "style" for a missing or
+ * unrecognized value. */
+function categoryFromSearchParams(params: URLSearchParams): RefCategory {
+  const raw = params.get("category");
+  return ALL_CATEGORIES.find((c) => c === raw) ?? "style";
 }
 
 /**
@@ -26,7 +39,8 @@ function isImageCategory(c: RefCategory): c is ImageRefCategory {
  * generation in progress to attach it to).
  */
 export function LibraryView() {
-  const [category, setCategory] = useState<RefCategory>("style");
+  const searchParams = useSearchParams();
+  const [category, setCategory] = useState<RefCategory>(() => categoryFromSearchParams(searchParams));
   const [source, setSource] = useState<"curated" | "library">("curated");
   const [query, setQuery] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -34,6 +48,9 @@ export function LibraryView() {
   const [savingUrl, setSavingUrl] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [viewingShots, setViewingShots] = useState<{ name: string; shotUrls: string[]; posterUrl: string | null } | null>(
+    null
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   const imageCategory = isImageCategory(category);
@@ -260,9 +277,22 @@ export function LibraryView() {
                 <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 gap-3">
                   {filteredUser.map((r) => (
                     <div key={r.id} className="group relative flex flex-col gap-1">
-                      <div className="aspect-square overflow-hidden rounded-xl border border-border-subtle bg-surface-2">
+                      <div className="relative aspect-square overflow-hidden rounded-xl border border-border-subtle bg-surface-2">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={r.image_url} alt={r.name} className="h-full w-full object-cover" />
+                        <img
+                          src={r.poster_url || r.image_url}
+                          alt={r.name}
+                          className={cn("h-full w-full", r.poster_url ? "object-contain" : "object-cover")}
+                        />
+                        {(r.shot_urls.length > 0 || r.poster_url) && (
+                          <button
+                            onClick={() => setViewingShots({ name: r.name, shotUrls: r.shot_urls, posterUrl: r.poster_url })}
+                            title="View generated shots"
+                            className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/90"
+                          >
+                            <Images className="h-2.5 w-2.5" /> {r.shot_urls.length}
+                          </button>
+                        )}
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="truncate text-[11px] text-muted">{r.name}</span>
@@ -306,6 +336,33 @@ export function LibraryView() {
           )}
 
           {error && <div className="text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
+
+          {category === "character" && (
+            <Link
+              href="/studio/character"
+              className="group relative mt-4 flex items-center justify-between gap-4 overflow-hidden rounded-2xl border border-border-subtle bg-surface p-5 transition-colors hover:border-accent/50"
+            >
+              <div
+                className="pointer-events-none absolute inset-0 opacity-40 transition-opacity group-hover:opacity-60"
+                style={{
+                  background:
+                    "radial-gradient(circle at 15% 30%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 60%)",
+                }}
+              />
+              <div className="relative min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-accent">
+                  <Sparkles className="h-3.5 w-3.5" /> Character Studio
+                </div>
+                <div className="mt-1 text-sm font-semibold">Generate your character in Character Studio</div>
+                <p className="mt-0.5 text-xs text-muted">
+                  One reference photo → a full studio character sheet — every angle, pose, expression and light.
+                </p>
+              </div>
+              <span className="relative shrink-0 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white transition-colors group-hover:bg-accent-2">
+                Open →
+              </span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -319,6 +376,15 @@ export function LibraryView() {
             setDeleting(null);
           }}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+
+      {viewingShots && (
+        <CharacterShotsModal
+          name={viewingShots.name}
+          shotUrls={viewingShots.shotUrls}
+          posterUrl={viewingShots.posterUrl}
+          onClose={() => setViewingShots(null)}
         />
       )}
     </div>

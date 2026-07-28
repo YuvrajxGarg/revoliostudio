@@ -133,20 +133,37 @@ export function ToolStudioView({ toolId }: { toolId: string }) {
   const BespokeComposer = BESPOKE_COMPOSERS[tool.id];
 
   return (
-    <div className="flex-1 flex min-h-0 gap-3 px-3 pb-3 pt-3">
+    <div className="flex-1 flex flex-col min-h-0 gap-4 px-3 pb-3 pt-3">
+      {/* Banner header — Community-style: icon chip + title + tagline,
+          centered to the same max-width the two-panel body below uses, so
+          on wide screens this doesn't stretch edge-to-edge. Always visible
+          (shrink-0), which is why the aside/gallery headers below no longer
+          repeat the tool's icon/title/description themselves. */}
+      <div className="mx-auto w-full max-w-6xl shrink-0">
+        <div className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-surface p-5 md:p-6">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold tracking-tight">{tool.title}</h1>
+            <p className="mt-0.5 truncate text-xs text-muted">{tool.description}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-6xl min-h-0 flex-1 gap-4">
       {/* Left control panel. Project selector lives in the TopNav so it
           costs no vertical space here. */}
       <aside className="hidden lg:flex w-[320px] shrink-0 flex-col rounded-2xl border border-border-subtle/60 bg-surface/50 backdrop-blur-md shadow-lg overflow-hidden">
-        <div className="flex flex-col gap-2.5 border-b border-border-subtle/60 p-3 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => router.push("/home")} title="Back" className="text-muted hover:text-foreground">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <h1 className="flex items-center gap-1.5 truncate text-sm font-semibold">
-              <Icon className="h-4 w-4 shrink-0" /> {tool.title}
-            </h1>
-          </div>
-          <p className="text-xs text-muted leading-relaxed">{tool.description}</p>
+        <div className="flex items-center gap-2 border-b border-border-subtle/60 p-3.5 shrink-0">
+          <button
+            onClick={() => router.push("/home")}
+            title="Back to Home"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-foreground transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-xs font-medium text-muted">Back to Home</span>
         </div>
 
         {tool.tabs.length > 1 && (
@@ -166,7 +183,7 @@ export function ToolStudioView({ toolId }: { toolId: string }) {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
           {activeTab.referenceHint && <p className="text-[11px] text-muted -mb-1">{activeTab.referenceHint}</p>}
 
           {tool.stylePresets && tool.stylePresets.length > 0 && (
@@ -210,18 +227,15 @@ export function ToolStudioView({ toolId }: { toolId: string }) {
         </div>
       </aside>
 
-      {/* Main stage — this tool's own gallery, scoped to its tool_id. */}
+      {/* Main stage — this tool's own gallery, scoped to its tool_id. Icon/
+          title dropped from this header (now redundant with the banner
+          above) — just the search/filter/grid-size controls remain. */}
       <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
-          <div className="flex items-center gap-1.5 text-sm font-medium">
-            <Icon className="h-4 w-4 text-muted" /> {tool.title}
-          </div>
-          <div className="flex items-center gap-2">
-            <GalleryToolbar search={search} onSearch={setSearch} filters={filters} onFilters={setFilters} showTool={false} />
-            {items.length > 0 && <GridSizeSlider value={colWidth} onChange={setColWidth} />}
-          </div>
+        <div className="flex items-center justify-end gap-2 px-5 md:px-6 py-3.5 border-b border-border-subtle/60 shrink-0">
+          <GalleryToolbar search={search} onSearch={setSearch} filters={filters} onFilters={setFilters} showTool={false} />
+          {items.length > 0 && <GridSizeSlider value={colWidth} onChange={setColWidth} />}
         </div>
-        <div className="flex-1 overflow-y-auto p-4 pb-32 lg:pb-4">
+        <div className="flex-1 overflow-y-auto p-5 pb-32 lg:pb-5">
           <GenerationGrid
             items={items}
             loading={loading}
@@ -233,6 +247,7 @@ export function ToolStudioView({ toolId }: { toolId: string }) {
             columnWidth={colWidth}
           />
         </div>
+      </div>
       </div>
 
       {/* Fallback composer for narrow screens where the sidebar is hidden. */}

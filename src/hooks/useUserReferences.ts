@@ -10,6 +10,14 @@ export interface UserReference {
   name: string;
   image_url: string;
   source: "upload" | "generation";
+  /** Character Sheet's generated shots for this saved character, if any —
+   * empty for a plain style/location/element reference or a character saved
+   * without a sheet. */
+  shot_urls: string[];
+  /** Character Sheet's composited poster (see characterSheetCompositor.ts),
+   * uploaded to Storage at save time — null for anything saved without a
+   * sheet. Preferred over `image_url` as the card preview when present. */
+  poster_url: string | null;
   created_at: string;
 }
 
@@ -18,6 +26,8 @@ export interface UserReferenceInput {
   name: string;
   image_url: string;
   source?: "upload" | "generation";
+  shot_urls?: string[];
+  poster_url?: string;
 }
 
 /**

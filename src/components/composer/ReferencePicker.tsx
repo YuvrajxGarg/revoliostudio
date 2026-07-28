@@ -38,7 +38,19 @@ export const TAG_CATEGORIES: { id: RefCategory; label: string; icon: LucideIcon 
 ];
 
 export type ReferencePickResult =
-  | { type: "image"; url: string; name: string; category: ImageRefCategory; promptModifier?: string }
+  | {
+      type: "image";
+      url: string;
+      name: string;
+      category: ImageRefCategory;
+      promptModifier?: string;
+      /** A saved character's own generated shots (character_sheets output,
+       * see GenerateTab's "Save character…"), tagged along automatically when
+       * you pick that character from Your Library — so tagging one character
+       * hands the generation several consistent angles/poses to work from
+       * instead of just the one source photo. */
+      extraUrls?: string[];
+    }
   | { type: "prompt"; text: string };
 
 function isImageCategory(c: RefCategory): c is ImageRefCategory {
@@ -290,7 +302,15 @@ export function ReferencePicker({
                         key={r.id}
                         url={r.image_url}
                         name={r.name}
-                        onClick={() => onApply({ type: "image", url: r.image_url, name: r.name, category })}
+                        onClick={() =>
+                          onApply({
+                            type: "image",
+                            url: r.image_url,
+                            name: r.name,
+                            category,
+                            extraUrls: category === "character" && r.shot_urls.length > 0 ? r.shot_urls : undefined,
+                          })
+                        }
                       />
                     ))}
                 </div>

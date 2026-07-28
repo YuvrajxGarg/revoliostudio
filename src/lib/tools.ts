@@ -160,7 +160,7 @@ export const ALL_TOOLS: ToolEntry[] = [
   {
     href: "/studio/character",
     label: "Character Studio",
-    description: "Keep a face consistent across new scenes, outfits & poses",
+    description: "One photo → a full studio character sheet: angles, poses, expressions & lighting",
     icon: "UserRound",
     group: "Studios",
     category: "Image",
@@ -243,6 +243,20 @@ export const ALL_TOOLS: ToolEntry[] = [
     label: "Angle Generator",
     description: "Orbit an interactive camera around a photo and re-render it from a new angle",
     icon: "Camera",
+    group: "Studios",
+    category: "Image",
+    defaultPinned: false,
+  },
+  // Fully bespoke page (src/components/studio/effects/EffectsStudioView.tsx)
+  // — unlike every entry above, this isn't routed through ToolStudioView or
+  // configured in toolStudios.ts at all, since it's a client-side procedural
+  // effects engine (halftone, dither, ASCII, glitch, ...) with no muapi
+  // generation job or gallery involved.
+  {
+    href: "/studio/effects",
+    label: "Effects Studio",
+    description: "Real-time halftone, dither, ASCII, glitch & more — applied live in your browser",
+    icon: "SlidersHorizontal",
     group: "Studios",
     category: "Image",
     defaultPinned: false,
