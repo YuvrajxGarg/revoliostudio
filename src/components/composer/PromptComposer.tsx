@@ -10,7 +10,7 @@ import { ModelSelector } from "./ModelSelector";
 import { ReferenceTray, type ReferenceQuickPick } from "./ReferenceTray";
 import { FrameSlots } from "./FrameSlots";
 import { SettingsBar } from "./SettingsBar";
-import { MentionPopover } from "./MentionPopover";
+import { MentionPopover, type MentionItem } from "./MentionPopover";
 import { MentionHighlightTextarea } from "./MentionHighlightTextarea";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { ReferencePicker, IMAGE_CATEGORIES, TAG_CATEGORIES, type ReferencePickResult } from "./ReferencePicker";
@@ -524,7 +524,7 @@ export function PromptComposer({
     setMentionQuery(match ? match[1] : null);
   }
 
-  function handleMentionSelect(item: { id: string; url: string; label: string }) {
+  function handleMentionSelect(item: MentionItem) {
     const el = textareaRef.current;
     if (!el) return;
     const cursor = el.selectionStart ?? prompt.length;
@@ -532,11 +532,24 @@ export function PromptComposer({
 
     // If this is already one of the current composer references (tagged
     // from "Your references"), don't add a duplicate — just insert its
-    // existing name. Otherwise attach it fresh: always auto-name "Image N"
-    // (never the gallery item's own title/prompt-derived label) so the tag
-    // matches what shows in the reference tray.
+    // existing name. Otherwise attach it fresh: a plain gallery pick always
+    // auto-names "Image N" (never its own title/prompt-derived label), but a
+    // saved character (useLabelAsName) keeps its real name so "@Alex" reads
+    // as "Alex" in the reference tray instead of a generic index.
     const existing = references.find((r) => r.url === item.url);
-    const mentionName = existing ? existing.name : (addReference(item.url, undefined, maxRefs || 4)?.name ?? item.label);
+    const mentionName =
+      existing?.name ??
+      addReference(item.url, item.useLabelAsName ? item.label : undefined, maxRefs || 4)?.name ??
+      item.label;
+
+    // A saved character's shots + poster ride along automatically — see
+    // MentionPopover's characterRefs and ReferencePicker's own extraUrls,
+    // same mechanism. Skipped when the primary was already attached (existing),
+    // since the extras would presumably already be attached too from that
+    // earlier pick.
+    if (!existing) {
+      item.extraUrls?.forEach((url, i) => addReference(url, `${mentionName} ${i + 2}`, maxRefs || 4, "character"));
+    }
 
     const replaced = uptoCursor.replace(/@([\w-]*)$/, `@${mentionName} `);
     const newValue = replaced + prompt.slice(cursor);

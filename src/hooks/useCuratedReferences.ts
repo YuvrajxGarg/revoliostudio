@@ -16,6 +16,11 @@ export interface CuratedReference {
   swatch_colors: string[];
   tags: string[];
   sort_order: number;
+  /** Character-category only — see useUserReferences' characterAssetUrls,
+   * copied over at publish time (0037_curated_character_publishing.sql). */
+  shot_urls: string[];
+  poster_url: string | null;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -28,6 +33,8 @@ export interface CuratedReferenceInput {
   swatch_colors?: string[];
   tags?: string[];
   sort_order?: number;
+  shot_urls?: string[];
+  poster_url?: string | null;
 }
 
 /**

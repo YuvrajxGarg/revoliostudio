@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Images, Trash2, UserRound } from "lucide-react";
+import { Globe, Images, Loader2, Trash2, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserReferences } from "@/hooks/useUserReferences";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { CharacterShotsModal } from "@/components/library/CharacterShotsModal";
+import { formatErrorMessage } from "@/lib/errorFormat";
 
 /**
  * Saved characters — built entirely on the existing Library reference
@@ -15,11 +16,22 @@ import { CharacterShotsModal } from "@/components/library/CharacterShotsModal";
  * exists yet — see the Character Sheet plan's known limitations).
  */
 export function MyCharactersTab({ onUseCharacter }: { onUseCharacter: (faceUrl: string) => void }) {
-  const { references, loading, deleteUserReference } = useUserReferences("character");
+  const { references, loading, deleteUserReference, publishCharacter, unpublishCharacter } =
+    useUserReferences("character");
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const [viewingShots, setViewingShots] = useState<{ name: string; shotUrls: string[]; posterUrl: string | null } | null>(
     null
   );
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  async function handleTogglePublish(r: (typeof references)[number]) {
+    setPublishing(r.id);
+    setPublishError(null);
+    const err = r.published_curated_id ? await unpublishCharacter(r) : await publishCharacter(r);
+    setPublishing(null);
+    if (err) setPublishError(err);
+  }
 
   if (loading) {
     return (
@@ -66,20 +78,49 @@ export function MyCharactersTab({ onUseCharacter }: { onUseCharacter: (faceUrl: 
                   <Images className="h-3 w-3" /> {r.shot_urls.length}
                 </button>
               )}
+              {r.published_curated_id && (
+                <span
+                  title="Published — anyone can use this character"
+                  className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-white"
+                >
+                  <Globe className="h-3 w-3" /> Published
+                </span>
+              )}
             </div>
             <div className="flex items-center justify-between gap-1">
               <span className="truncate text-xs text-muted">{r.name}</span>
-              <button
-                onClick={() => setDeleting({ id: r.id, name: r.name })}
-                title="Delete"
-                className="icon-btn-round !h-5 !w-5 shrink-0 opacity-0 transition-opacity hover:!bg-danger/20 group-hover:opacity-100"
-              >
-                <Trash2 className="h-3 w-3 text-danger-text" />
-              </button>
+              <div className="flex items-center gap-0.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  onClick={() => handleTogglePublish(r)}
+                  disabled={publishing === r.id}
+                  title={r.published_curated_id ? "Unpublish from Library" : "Publish to Library — anyone can use it"}
+                  className={cn(
+                    "icon-btn-round !h-5 !w-5 disabled:opacity-50",
+                    r.published_curated_id && "!text-accent hover:!bg-accent/10"
+                  )}
+                >
+                  {publishing === r.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Globe className="h-3 w-3" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setDeleting({ id: r.id, name: r.name })}
+                  title="Delete"
+                  className="icon-btn-round !h-5 !w-5 hover:!bg-danger/20 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3 text-danger-text" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      {publishError && (
+        <p className="mt-3 text-center text-xs text-danger-text">{formatErrorMessage(publishError).message}</p>
+      )}
 
       {deleting && (
         <ConfirmModal

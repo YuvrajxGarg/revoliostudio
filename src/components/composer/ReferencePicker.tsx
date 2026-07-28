@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { uploadReferenceFile } from "@/lib/upload";
 import { useCuratedReferences, type RefCategory, type ImageRefCategory } from "@/hooks/useCuratedReferences";
-import { useUserReferences } from "@/hooks/useUserReferences";
+import { useUserReferences, characterAssetUrls } from "@/hooks/useUserReferences";
 import { CAMERA_TAGS, EFFECT_TAGS, COLOR_PALETTES } from "@/lib/referenceTags";
 import { formatErrorMessage } from "@/lib/errorFormat";
 
@@ -280,39 +280,54 @@ export function ReferencePicker({
                 <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
                   <UploadTile uploading={uploading} onFile={handleUpload} />
                   {source === "curated" &&
-                    filteredCurated.map((r) => (
-                      <ImageTile
-                        key={r.id}
-                        url={r.image_url || r.thumbnail_url || ""}
-                        name={r.name}
-                        onClick={() =>
-                          onApply({
-                            type: "image",
-                            url: (r.image_url || r.thumbnail_url)!,
-                            name: r.name,
-                            category,
-                            promptModifier: r.prompt_modifier ?? undefined,
-                          })
-                        }
-                      />
-                    ))}
+                    filteredCurated.map((r) => {
+                      // A published character (see useUserReferences'
+                      // publishCharacter) carries its own shots/poster the
+                      // same way a saved-but-unpublished one does — tag it
+                      // the same way: poster/shots as the reference, never
+                      // the plain face photo, see characterAssetUrls.
+                      const assets = category === "character" ? characterAssetUrls(r) : [];
+                      const fallback = r.image_url || r.thumbnail_url || "";
+                      const [primary, ...rest] = assets.length > 0 ? assets : [fallback];
+                      return (
+                        <ImageTile
+                          key={r.id}
+                          url={r.poster_url || fallback}
+                          name={r.name}
+                          onClick={() =>
+                            onApply({
+                              type: "image",
+                              url: primary,
+                              name: r.name,
+                              category,
+                              promptModifier: r.prompt_modifier ?? undefined,
+                              extraUrls: rest.length > 0 ? rest : undefined,
+                            })
+                          }
+                        />
+                      );
+                    })}
                   {source === "library" &&
-                    filteredUser.map((r) => (
-                      <ImageTile
-                        key={r.id}
-                        url={r.image_url}
-                        name={r.name}
-                        onClick={() =>
-                          onApply({
-                            type: "image",
-                            url: r.image_url,
-                            name: r.name,
-                            category,
-                            extraUrls: category === "character" && r.shot_urls.length > 0 ? r.shot_urls : undefined,
-                          })
-                        }
-                      />
-                    ))}
+                    filteredUser.map((r) => {
+                      const assets = category === "character" ? characterAssetUrls(r) : [];
+                      const [primary, ...rest] = assets.length > 0 ? assets : [r.image_url];
+                      return (
+                        <ImageTile
+                          key={r.id}
+                          url={r.poster_url || r.image_url}
+                          name={r.name}
+                          onClick={() =>
+                            onApply({
+                              type: "image",
+                              url: primary,
+                              name: r.name,
+                              category,
+                              extraUrls: rest.length > 0 ? rest : undefined,
+                            })
+                          }
+                        />
+                      );
+                    })}
                 </div>
                 {source === "curated" && !curatedLoading && filteredCurated.length === 0 && (
                   <p className="mt-4 text-xs text-muted">

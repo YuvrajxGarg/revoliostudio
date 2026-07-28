@@ -3,11 +3,32 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useComposerStore } from "@/store/composerStore";
+import { useUserReferences, characterAssetUrls } from "@/hooks/useUserReferences";
+import { useCuratedReferences } from "@/hooks/useCuratedReferences";
+import { cn } from "@/lib/utils";
 
-interface MentionItem {
+export interface MentionItem {
   id: string;
+  /** The URL that actually becomes the attached reference. For a saved
+   * character this is its poster (or first shot) — never the plain source
+   * face photo, see extraUrls' doc comment. */
   url: string;
   label: string;
+  /** Shown in the tile instead of `url` when set — only differs from `url`
+   * for a character with no generated assets yet, where the tile still
+   * previews the face photo even though nothing's attached from it. */
+  thumbnailUrl?: string;
+  /** Extra reference images that ride along with `url` when this item is
+   * picked — a saved character's *other* generated shots (see
+   * GenerateTab's "Save character…" and characterAssetUrls). Deliberately
+   * never includes the character's original uploaded face photo: once a
+   * sheet exists, the poster/shots are the useful "this is the character"
+   * references, not the raw selfie used to make them. */
+  extraUrls?: string[];
+  /** Use this item's own `label` as the added reference's name instead of
+   * the usual auto "Image N" — so tagging "@Alex" actually shows "Alex" in
+   * the reference tray, not a generic index. */
+  useLabelAsName?: boolean;
 }
 
 export function MentionPopover({
@@ -27,10 +48,49 @@ export function MentionPopover({
   const references = useComposerStore((s) => s.references);
   const [items, setItems] = useState<MentionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { references: savedCharacters } = useUserReferences("character");
+  const { references: curatedCharacters } = useCuratedReferences("character");
 
   const ownRefs: MentionItem[] = references
     .map((r) => ({ id: r.id, url: r.url, label: r.name }))
     .filter((r) => (query ? r.label.toLowerCase().includes(query.toLowerCase()) : true));
+
+  // Saved characters (Character Studio's "Save character…") get their own
+  // section rather than being folded into "Your references" — picking one
+  // attaches its generated shots/poster (see characterAssetUrls) instead of
+  // the plain face photo, and the @mention uses the character's real name
+  // instead of a generic "Image N". A character with no generated assets yet
+  // (saved before ever running a sheet) falls back to the face photo — it's
+  // all there is to attach in that case.
+  function toMentionItems(list: { id: string; name: string; image_url: string; shot_urls: string[]; poster_url: string | null }[]): MentionItem[] {
+    return list
+      .map((r) => {
+        const assets = characterAssetUrls(r);
+        const [primary, ...rest] = assets.length > 0 ? assets : [r.image_url];
+        return {
+          id: r.id,
+          url: primary,
+          label: r.name,
+          thumbnailUrl: r.poster_url || r.image_url,
+          extraUrls: rest,
+          useLabelAsName: true,
+        };
+      })
+      .filter((r) => (query ? r.label.toLowerCase().includes(query.toLowerCase()) : true));
+  }
+
+  const characterRefs = toMentionItems(savedCharacters);
+  // Community-published characters (see publishCharacter) — anyone can tag
+  // these, not just their original creator.
+  const communityCharacterRefs = toMentionItems(
+    curatedCharacters.map((c) => ({
+      id: c.id,
+      name: c.name,
+      image_url: c.image_url ?? "",
+      shot_urls: c.shot_urls,
+      poster_url: c.poster_url,
+    }))
+  ).filter((c) => c.url);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +135,13 @@ export function MentionPopover({
         direction === "down" ? "top-full mt-2" : "bottom-full mb-2"
       }`}
     >
+      {characterRefs.length > 0 && (
+        <CharacterMentionSection title="Your characters" items={characterRefs} onSelect={onSelect} />
+      )}
+      {communityCharacterRefs.length > 0 && (
+        <CharacterMentionSection title="Community characters" items={communityCharacterRefs} onSelect={onSelect} />
+      )}
+
       {ownRefs.length > 0 && (
         <>
           <div className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -126,5 +193,41 @@ export function MentionPopover({
         Esc to close
       </button>
     </div>
+  );
+}
+
+function CharacterMentionSection({
+  title,
+  items,
+  onSelect,
+}: {
+  title: string;
+  items: MentionItem[];
+  onSelect: (item: MentionItem) => void;
+}) {
+  return (
+    <>
+      <div className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className="grid grid-cols-4 gap-1.5 mb-2">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onSelect(item)}
+            className="group relative aspect-square rounded-lg overflow-hidden border border-border-subtle bg-surface-2 hover:border-accent transition-colors"
+            title={`${item.label}${item.extraUrls?.length ? ` (+${item.extraUrls.length} shots)` : ""}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.thumbnailUrl || item.url}
+              alt={item.label}
+              className={cn("h-full w-full", item.thumbnailUrl ? "object-contain" : "object-cover")}
+            />
+            <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 py-0.5 text-[9px] text-white">
+              {item.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }

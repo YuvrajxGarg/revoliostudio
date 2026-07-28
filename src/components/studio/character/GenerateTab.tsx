@@ -91,7 +91,7 @@ export function GenerateTab({
       slot,
       proxyUrl: slot.status === "completed" ? `/api/character-sheet/${sheet.id}/image?slot=${slot.index}` : null,
     }));
-    compositeCharacterSheetPoster(sheet.metadata!, images)
+    compositeCharacterSheetPoster(images)
       .then((blob) => setPosterUrl(URL.createObjectURL(blob)))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to build the poster"))
       .finally(() => setCompositing(false));
