@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppSidebar isAdmin={user.isAdmin} />
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <MobileNav isAdmin={user.isAdmin} />
-        <AccountBar email={user.email} displayName={user.displayName} avatarUrl={user.avatarUrl} isAdmin={user.isAdmin} />
+        <AccountBar email={user.email} displayName={user.displayName} avatarUrl={user.avatarUrl} username={user.username} isAdmin={user.isAdmin} />
         {children}
       </div>
     </div>

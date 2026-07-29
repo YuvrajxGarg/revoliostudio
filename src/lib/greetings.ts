@@ -3,42 +3,57 @@
  * per page load, in the same spirit as `randomTip` in tips.ts. `{name}` is
  * substituted with the user's first name, or dropped (and surrounding
  * punctuation cleaned up) when we don't have one.
+ *
+ * Voice rules, learned the hard way: no em dashes, and no two lines sharing
+ * a sentence shape. The previous pool was ten variations of
+ * "Good <time>, {name} — <exhortation>." which is exactly what generated
+ * copy reads like. Assume the reader is an editor with a deadline and a
+ * client, not someone who needs to be told that creating is fun. Dry beats
+ * enthusiastic; specific beats motivational. Avoid "prompt", "generate",
+ * "masterpiece" and "AI" — the greeting should sound like the tool, not
+ * like the marketing for the tool.
  */
 const MORNING: string[] = [
-  "Good morning, {name} — let's make something great.",
-  "Rise and render, {name}.",
-  "Morning, {name}. Coffee's optional, generating isn't.",
-  "Good morning, {name} — what are we creating today?",
-  "Morning, {name} — first render of the day is always the best one.",
+  "Morning, {name}. The good light doesn't last.",
+  "You're up, {name}. The render queue isn't.",
+  "Morning, {name}. Fresh eyes, cheap revisions.",
+  "Coffee first, {name}. We'll be here.",
+  "Morning, {name}. Nothing's been ruined yet.",
 ];
 
 const AFTERNOON: string[] = [
-  "Good afternoon, {name} — let's keep the momentum going.",
-  "Afternoon, {name}. Time to make something cool.",
-  "Good afternoon, {name} — your next masterpiece is one prompt away.",
-  "Hey {name}, the afternoon slump is no match for a good generation.",
-  "Good afternoon, {name} — let's ship something today.",
+  "Afternoon, {name}. Still fixable.",
+  "Afternoon, {name}. The good idea usually shows up around now.",
+  "Back at it, {name}.",
+  "Afternoon, {name}. Nobody nails it on the first pass.",
+  "Afternoon, {name}. Version three is normally the one.",
 ];
 
 const EVENING: string[] = [
-  "Good evening, {name} — let's wind down with something creative.",
-  "Evening, {name}. One more generation before you call it a day?",
-  "Good evening, {name} — golden hour for golden renders.",
-  "Evening, {name} — what should we make tonight?",
+  "Evening, {name}. Golden hour, if you're outside.",
+  "Evening, {name}. One more version, then dinner.",
+  "Evening, {name}. The client can wait until tomorrow.",
+  "Evening, {name}. Quietest hours are the productive ones.",
+  "Evening, {name}. Save before you close anything.",
 ];
 
 const LATE_NIGHT: string[] = [
-  "Working late, {name}? Respect the hustle.",
-  "Burning the midnight oil, {name}?",
-  "Still up, {name}? Let's make it count.",
-  "Night owl mode, {name} — let's create something while it's quiet.",
+  "Still here, {name}? So are we.",
+  "Late shift, {name}. Don't trust your color judgment past 2am.",
+  "It's late, {name}. Whatever you're fixing will still be broken tomorrow.",
+  "Nobody makes good decisions at this hour, {name}. Make something anyway.",
 ];
 
 function fill(template: string, firstName: string): string {
   if (firstName) return template.replace("{name}", firstName);
   // Drop the ", {name}" clause entirely rather than leaving a stray comma
-  // or "Hey ,".
-  return template.replace(/,?\s*\{name\}/, "");
+  // or "Hey ,". A line written as "{name}, ..." would still leave a leading
+  // comma behind, so tidy the head of the string and close up any double
+  // space the removal opened.
+  return template
+    .replace(/,?\s*\{name\}/, "")
+    .replace(/^[,\s]+/, "")
+    .replace(/\s{2,}/g, " ");
 }
 
 /** Picks one greeting line at random, appropriate for the given hour (0-23). */

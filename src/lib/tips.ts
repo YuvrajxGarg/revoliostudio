@@ -120,6 +120,11 @@ export const TIPS: string[] = [
   "The sidebar's Create menu jumps straight into Thumbnail Generator or Explainer Storyboard without pinning them first — handy for a one-off.",
   "Sensitive to on-screen motion? Turning on \"Reduce motion\" in your OS settings shortens or removes Revolio's decorative animations automatically.",
 
+  // Account menu
+  "Set a username in Settings and you get a public profile page: your published work, your stats, and a year of activity at a glance. Open it any time from My profile in the account menu.",
+  "Wondering where the credits went? My usage in the account menu breaks your spend down by model, with weekly and monthly charts.",
+  "Your account menu lives behind your avatar in the top right. Profile, usage and settings are all one click from there.",
+
   // Reference Library
   "Hit the Style or Character button next to References in any composer to open the Reference Library — browse Style, Character, Location, and Element picks, or one-click prompt tags for Camera, Effects, and Color.",
   "Upload an image into the Reference Library and give it a name to save it as a reusable Style or Character — pick it by name in any future generation instead of re-uploading it each time.",

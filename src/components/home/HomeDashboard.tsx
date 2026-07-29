@@ -342,7 +342,7 @@ export function HomeDashboard({
               </div>
             ) : recent.items.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-1 py-16 text-center text-muted">
-                <p className="text-sm">Nothing yet — open a tool above and generate your first piece.</p>
+                <p className="text-sm">Nothing here yet. Pick a tool above and make something.</p>
               </div>
             ) : (
               // Boxed preview cards — a uniform grid with a real gap and a
@@ -395,7 +395,7 @@ export function HomeDashboard({
             </div>
           ) : libraryRefs.length === 0 ? (
             <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-8 text-center text-sm text-muted">
-              No saved references yet — save a Style, Character, Location, or Element from any generation to reuse it later.
+              No saved references yet. Save a Style, Character, Location or Element from any generation and it&apos;ll show up here.
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-3">

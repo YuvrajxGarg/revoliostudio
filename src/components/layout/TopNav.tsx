@@ -88,7 +88,10 @@ export function TopNav({
           <span className="hidden md:inline">Release notes</span>
         </Link>
         <NotificationCenter />
-        <UserMenu email={email} displayName={displayName} avatarUrl={avatarUrl} />
+        {/* username isn't plumbed into TopNav because nothing renders TopNav
+            any more (AccountBar replaced it) — null just degrades the profile
+            row to the "set up your profile" prompt. */}
+        <UserMenu email={email} displayName={displayName} avatarUrl={avatarUrl} username={null} />
       </div>
     </header>
   );

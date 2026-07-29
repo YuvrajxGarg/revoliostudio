@@ -12,6 +12,16 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "v1.77",
+    title: "A friendlier home page and a proper account menu",
+    tag: "Improved",
+    highlights: [
+      "Rewrote the home page greeting. It used to be ten variations of the same sentence; now it changes with the hour and actually sounds like a person wrote it.",
+      "The account menu got the same treatment as every other dropdown in the app, and picked up two rows it should always have had: My profile, which opens your public page, and My usage, for your spend and history.",
+      "Sign out is now marked as the destructive action it is, Escape closes the menu, and the whole thing is keyboard and screen-reader addressable.",
+    ],
+  },
+  {
     version: "v1.76",
     title: "Home's Tools section now shows your most-used custom tools",
     tag: "Improved",

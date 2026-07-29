@@ -20,11 +20,13 @@ export function AccountBar({
   email,
   displayName,
   avatarUrl,
+  username,
   isAdmin,
 }: {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
+  username: string | null;
   isAdmin: boolean;
 }) {
   const pathname = usePathname();
@@ -55,7 +57,7 @@ export function AccountBar({
         </Link>
       )}
       <ThemeToggle />
-      <UserMenu email={email} displayName={displayName} avatarUrl={avatarUrl} />
+      <UserMenu email={email} displayName={displayName} avatarUrl={avatarUrl} username={username} />
       </div>
     </div>
   );

@@ -71,7 +71,7 @@ function Row({
 }
 
 /**
- * Magnific-style "Ask Revolio or search projects" command palette — the
+ * Magnific-style "Search your work, or just ask" command palette — the
  * Home search bar itself doubles as the trigger, plus a global Ctrl/Cmd+K
  * shortcut. Self-contained: owns its own open/query/selection state so
  * HomeDashboard just drops this in where the old plain input used to be.
@@ -210,7 +210,7 @@ export function CommandPalette() {
         )}
       >
         <Search className="h-4 w-4 text-muted shrink-0" />
-        <span className="flex-1 text-sm text-muted">Ask Revolio or search your generations…</span>
+        <span className="flex-1 text-sm text-muted">Search your work, or just ask</span>
         <Kbd>Ctrl K</Kbd>
       </button>
 
@@ -248,7 +248,7 @@ export function CommandPalette() {
                     setActiveIndex(0);
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask Revolio or search projects"
+                  placeholder="Search your work, or just ask"
                   className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
                 />
                 <Kbd>Esc</Kbd>
