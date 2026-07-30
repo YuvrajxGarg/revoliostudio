@@ -754,7 +754,14 @@ export const MODELS: ModelConfig[] = [
     // Verified against muapi.ai/seedream (2026): flagship tier, both T2I and
     // Edit endpoints live now, up to 2K output, $0.045/image at 1K rising to
     // $0.09/image at 2K.
+    // 2026-07-30: user hit "The file format is not supported" on every
+    // submission — confirmed via muapi's own playground API-reference page
+    // (muapi.ai/playground/bytedance-seedream-5.0-pro/api) that the real
+    // POST route is "seedream-5.0-pro" (no "bytedance-" prefix), same
+    // pattern as the Edit siblings below. `endpoint` stays the
+    // catalog-correct slug for schema lookups.
     endpoint: "bytedance-seedream-5.0-pro",
+    submitEndpoint: "seedream-5.0-pro",
     maxReferences: 0,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
@@ -772,7 +779,14 @@ export const MODELS: ModelConfig[] = [
     // Verified against muapi.ai/seedream (2026): current-gen tier, up to 4K
     // output, $0.0325/image — cheaper than Seedream 4.5 with a higher res
     // ceiling, so this is the better default over the old Pro-guessed slug.
+    // 2026-07-30: user hit "The file format is not supported" on every
+    // submission — confirmed via muapi's own playground API-reference page
+    // (muapi.ai/playground/bytedance-seedream-v5.0/api) that the real POST
+    // route is "seedream-5.0" (no "bytedance-" prefix, and "5.0" not
+    // "v5.0"), same pattern as the Edit siblings. `endpoint` stays the
+    // catalog-correct slug for schema lookups.
     endpoint: "bytedance-seedream-v5.0",
+    submitEndpoint: "seedream-5.0",
     maxReferences: 0,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
