@@ -425,6 +425,21 @@ export function AutopilotView({
     }
   }, [activeRun?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Deep-link: /autopilot?ask=<text> — the Home search bar's "Ask Pilot" row
+  // sends the typed question here. Open Assistant mode and fire it as the
+  // first message straight away (via handleSend's override, so we don't have
+  // to wait on the brief/mode state to settle), then strip the param so a
+  // refresh doesn't re-send. The ref guards against React re-running this.
+  const askParam = params.get("ask");
+  const askHandledRef = useRef(false);
+  useEffect(() => {
+    if (!askParam || askHandledRef.current) return;
+    askHandledRef.current = true;
+    setMode("assistant");
+    handleSend({ text: askParam, mode: "assistant" });
+    router.replace("/autopilot");
+  }, [askParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [activeRun?.messages?.length, activeRun?.plan, pendingTurn]);
@@ -489,9 +504,14 @@ export function AutopilotView({
     setRunFlow(flow);
   }
 
-  async function handleSend() {
-    if (planning || !brief.trim()) return;
-    const text = brief.trim();
+  async function handleSend(override?: { text?: string; mode?: OrchestratorMode }) {
+    // `override` lets a caller send a specific message/mode without waiting on
+    // the brief/mode state to settle first — used by the ?ask= deep link, which
+    // seeds and fires a first Assistant message in one go. Normal callers pass
+    // nothing and fall back to the composer's own state.
+    const effectiveMode = override?.mode ?? mode;
+    const text = (override?.text ?? brief).trim();
+    if (planning || !text) return;
     const draftReferences = references;
     const referenceUrls = draftReferences.map((r) => r.url);
     // Sent to the server as {url, tag?} — the tag is either what the user
@@ -529,7 +549,7 @@ export function AutopilotView({
         body: JSON.stringify(
           activeRun
             ? { text, references: referencePayload }
-            : { brief: text, plannerModel: llmModel, references: referencePayload, mode }
+            : { brief: text, plannerModel: llmModel, references: referencePayload, mode: effectiveMode }
         ),
       });
       const data = await res.json();
@@ -816,7 +836,7 @@ export function AutopilotView({
               <div className="flex items-center justify-between gap-2">
                 <LlmModelSelector value={llmModel} onChange={setLlmModel} disabled={planning} />
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={planning || !brief.trim()}
                   className="flex shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 hover:bg-accent-2 transition-colors"
                 >
@@ -1013,7 +1033,7 @@ export function AutopilotView({
                     disabledReason="This thread's model is locked in — start a new chat to pick a different one"
                   />
                   <button
-                    onClick={handleSend}
+                    onClick={() => handleSend()}
                     disabled={composerDisabled || !brief.trim()}
                     className="flex shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 hover:bg-accent-2 transition-colors"
                   >

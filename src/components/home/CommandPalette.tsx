@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft, Search } from "lucide-react";
+import { Bot, CornerDownLeft, Search } from "lucide-react";
 import { ALL_TOOLS, type ToolEntry } from "@/lib/tools";
 import { resolveToolIcon } from "@/lib/toolIcons";
 import { getRecentTools } from "@/lib/recentTools";
@@ -21,6 +21,7 @@ const SHORTCUT_HINTS: Record<string, string> = {
 
 type PaletteItem =
   | { kind: "search"; query: string }
+  | { kind: "ask"; query: string }
   | { kind: "tool"; tool: ToolEntry; section: "recent" | "action" };
 
 function Kbd({ children }: { children: React.ReactNode }) {
@@ -152,7 +153,13 @@ export function CommandPalette() {
 
   const items: PaletteItem[] = useMemo(() => {
     const list: PaletteItem[] = [];
-    if (query.trim()) list.push({ kind: "search", query: query.trim() });
+    // As soon as there's a query, offer both readings of "Search your work,
+    // or just ask": search generations, or hand the text straight to Pilot
+    // (Assistant mode) as a question.
+    if (query.trim()) {
+      list.push({ kind: "search", query: query.trim() });
+      list.push({ kind: "ask", query: query.trim() });
+    }
     list.push(...filteredRecents.map((tool) => ({ kind: "tool" as const, tool, section: "recent" as const })));
     list.push(...filteredActions.map((tool) => ({ kind: "tool" as const, tool, section: "action" as const })));
     return list;
@@ -164,12 +171,18 @@ export function CommandPalette() {
   // same tool appears in both Recents and Quick actions as two distinct
   // rows.
   const indexed = useMemo(() => items.map((item, idx) => ({ item, idx })), [items]);
-  const searchRow = indexed[0]?.item.kind === "search" ? indexed[0] : null;
+  const searchRow = indexed.find((r) => r.item.kind === "search") ?? null;
+  const askRow = indexed.find((r) => r.item.kind === "ask") ?? null;
   const recentRows = indexed.filter((r) => r.item.kind === "tool" && r.item.section === "recent");
   const actionRows = indexed.filter((r) => r.item.kind === "tool" && r.item.section === "action");
 
   function activate(item: PaletteItem, newTab: boolean) {
-    const href = item.kind === "search" ? `/gallery?q=${encodeURIComponent(item.query)}` : item.tool.href;
+    let href: string;
+    if (item.kind === "search") href = `/gallery?q=${encodeURIComponent(item.query)}`;
+    // Hands the typed text to Pilot's Assistant mode, which auto-sends it as
+    // the first message (see the ?ask= deep link in AutopilotView).
+    else if (item.kind === "ask") href = `/autopilot?ask=${encodeURIComponent(item.query)}`;
+    else href = item.tool.href;
     if (newTab) window.open(href, "_blank");
     else router.push(href);
     setOpen(false);
@@ -259,15 +272,27 @@ export function CommandPalette() {
                   <div className="py-8 text-center text-sm text-muted">No matches for &quot;{query}&quot;.</div>
                 )}
 
-                {searchRow && searchRow.item.kind === "search" && (
+                {(searchRow || askRow) && (
                   <div className="mb-1">
-                    <Row
-                      icon={Search}
-                      label={`Search generations for "${searchRow.item.query}"`}
-                      active={activeIndex === searchRow.idx}
-                      onClick={() => activate(searchRow.item, false)}
-                      onMouseEnter={() => setActiveIndex(searchRow.idx)}
-                    />
+                    {searchRow && searchRow.item.kind === "search" && (
+                      <Row
+                        icon={Search}
+                        label={`Search generations for "${searchRow.item.query}"`}
+                        active={activeIndex === searchRow.idx}
+                        onClick={() => activate(searchRow.item, false)}
+                        onMouseEnter={() => setActiveIndex(searchRow.idx)}
+                      />
+                    )}
+                    {askRow && askRow.item.kind === "ask" && (
+                      <Row
+                        icon={Bot}
+                        label={`Ask Pilot: "${askRow.item.query}"`}
+                        description="Chat with the assistant"
+                        active={activeIndex === askRow.idx}
+                        onClick={() => activate(askRow.item, false)}
+                        onMouseEnter={() => setActiveIndex(askRow.idx)}
+                      />
+                    )}
                   </div>
                 )}
 
