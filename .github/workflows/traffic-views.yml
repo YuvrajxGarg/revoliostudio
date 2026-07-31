@@ -1,0 +1,42 @@
+name: Repo traffic views
+
+on:
+  schedule:
+    # Daily at 03:17 UTC. Daily keeps the 14-day windows fully overlapping so
+    # no days are ever missed from the cumulative total.
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+# Only one aggregation should run at a time so the committed data never races.
+concurrency:
+  group: traffic-views
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Aggregate traffic views
+        env:
+          # Falls back to the Actions token; override with a PAT (repo /
+          # administration:read) if the default token is denied traffic access.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/traffic/aggregate-views.mjs
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/traffic/views.json .github/traffic/views-badge.json
+          git diff --staged --quiet || git commit -m "chore: update repo traffic views [skip ci]"
+          git push
