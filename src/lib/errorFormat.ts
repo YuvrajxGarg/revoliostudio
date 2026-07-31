@@ -45,7 +45,7 @@ function looksLikeCodeOrTrace(s: string): boolean {
 // against the extracted candidate message (case-insensitive substring).
 const KNOWN_PATTERNS: { test: RegExp; message: string }[] = [
   {
-    test: /nsfw|content[\s_-]?polic|safety filter|flagged/i,
+    test: /nsfw|content[\s_-]?polic|safety filter|flagged|does not comply|platform regulations/i,
     message: "This generation was blocked by the content safety filter. Try adjusting your prompt or reference image.",
   },
   {
@@ -94,6 +94,17 @@ function extractFromParsedJson(parsed: unknown): string | null {
   }
 
   if (typeof obj.detail === "string") return obj.detail;
+  // muapi's poll-result failures on some models come back as
+  // { detail: { id, status, error } } — e.g. content-policy rejections —
+  // rather than a top-level "error"/"message". Without this, the whole raw
+  // JSON blob falls through to the code/trace heuristic below and the real,
+  // actionable reason (e.g. "content does not comply with platform
+  // regulations") gets swallowed into a generic "unexpected error".
+  if (obj.detail && typeof obj.detail === "object" && !Array.isArray(obj.detail)) {
+    const nested = obj.detail as Record<string, unknown>;
+    if (typeof nested.error === "string") return nested.error;
+    if (typeof nested.message === "string") return nested.message;
+  }
   if (typeof obj.message === "string") return obj.message;
   if (typeof obj.error === "string") return obj.error;
   if (obj.error && typeof obj.error === "object") {
