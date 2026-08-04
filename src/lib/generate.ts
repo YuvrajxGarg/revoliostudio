@@ -267,13 +267,20 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   }
 
   // Edit Video (video-to-video): primary video input, optional reference
-  // images ("elements") via images_list.
+  // images ("elements") via images_list. The video field name and shape vary
+  // per model — most take a single "video_url" string, but Seedance 2.0 Video
+  // Edit takes "video_urls" (an array, max 1); videoFieldName/videoInputIsArray
+  // capture that. keep_original_sound is only sent to models whose schema has
+  // it (Seedance's doesn't — supportsKeepSound is false there).
   if (model.mode === "v2v") {
-    if (body.videoUrl) payload.video_url = body.videoUrl;
+    if (body.videoUrl) {
+      const videoKey = model.videoFieldName ?? "video_url";
+      payload[videoKey] = model.videoInputIsArray ? [body.videoUrl] : body.videoUrl;
+    }
     if (body.references?.length) {
       payload.images_list = body.references.slice(0, referenceCap);
     }
-    if (typeof body.settings?.keepOriginalSound === "boolean") {
+    if (model.supportsKeepSound !== false && typeof body.settings?.keepOriginalSound === "boolean") {
       payload.keep_original_sound = body.settings.keepOriginalSound;
     }
     return payload;

@@ -310,6 +310,10 @@ const VIDEO_FLAT_COST_USD: Record<string, number> = {
   // off the wrong sibling (kling-o1-video-edit-fast, $0.585) or a stale
   // muapi price; reverting to the confirmed-current $1.09.
   "kling-o1-video-edit": 1.09,
+  // Seedance 2.0 Video Edit — muapi catalog `cost` $1.50 (dynamic_pricing,
+  // "basic" quality @ 5s default). Flat here since the Edit Video composer
+  // exposes no duration/quality control, so the bill doesn't move with UI.
+  "seedance-2-video-edit": 1.5,
   "runway-motion-control": 0.07,
   // Verified against muapi.ai/playground/group/video-edit's own listing
   // (2026-07-15) — flat per-generation costs, not duration-scaled (none of

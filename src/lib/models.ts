@@ -72,13 +72,30 @@ export interface ModelConfig {
   /** True for "motion" mode models that need a separate character image alongside the motion video. */
   requiresCharacterImage?: boolean;
   /**
-   * For `mode: "motion"` models whose real schema sends the motion/reference
-   * video under a different key than the default "reference_video_url"
-   * (e.g. Wan Animate's "video_url", confirmed against its live muapi
-   * schema). When unset, "reference_video_url" is used — Runway Act-Two's
-   * actual field name.
+   * The muapi field name for the primary input video. Used by two modes:
+   *   - `mode: "motion"` models whose motion/reference video isn't under the
+   *     default "reference_video_url" (e.g. Wan Animate's "video_url").
+   *   - `mode: "v2v"` (Edit Video) models whose source-video field isn't the
+   *     default "video_url" (e.g. Seedance 2.0 Video Edit's "video_urls").
+   * When unset, motion mode uses "reference_video_url" and v2v uses
+   * "video_url" — the historical defaults for each.
    */
   videoFieldName?: string;
+  /**
+   * `mode: "v2v"` only: the primary video field is an array of URLs rather
+   * than a single string (e.g. Seedance 2.0 Video Edit's `video_urls`, which
+   * takes max 1 item). The single uploaded video is wrapped in a one-element
+   * array before submitting. When unset, the video is sent as a bare string.
+   */
+  videoInputIsArray?: boolean;
+  /**
+   * `mode: "v2v"` only: whether the model's schema has a `keep_original_sound`
+   * field. Most Edit Video models do; Seedance's video-edit does not (it
+   * handles audio via a separate `audio_files` input), so its "Keep original
+   * sound" toggle is hidden and the field is never submitted. Defaults to
+   * true (field sent) when unset, preserving existing models' behavior.
+   */
+  supportsKeepSound?: boolean;
   /**
    * Most `mode: "motion"` models (Runway Act-Two) ignore prompt entirely —
    * it's stripped from the payload. Set this when a motion model actually
@@ -2255,6 +2272,35 @@ export const MODELS: ModelConfig[] = [
     tagline: "Cut out the subject, transparent background — via Photoroom",
   },
   // ── Video editing / motion tools (real muapi endpoints) ────────────────
+  {
+    // ByteDance Seedance 2.0 Video Edit — a genuine video-to-video editor
+    // (restyle / modify an existing clip from a prompt), confirmed against
+    // muapi's live catalog: category "Video to Video", required fields
+    // prompt + video_urls (array, max 1), optional images_list (max 9),
+    // aspect_ratio enum, quality, duration. Listed FIRST in this v2v block
+    // so it's the default in the Edit Video tab (EditVideoComposer keys off
+    // the first v2v model). Endpoint split like the Seedream family: the GET
+    // schema/catalog lookup is keyed "seedance-2-video-edit" but the real
+    // POST submit route is "seedance-v2.0-video-edit" — hence submitEndpoint.
+    id: "seedance-2-video-edit",
+    label: "Seedance 2.0 Video Edit",
+    provider: "ByteDance",
+    category: "video",
+    mode: "v2v",
+    endpoint: "seedance-2-video-edit",
+    submitEndpoint: "seedance-v2.0-video-edit",
+    imageInputKey: "images_list",
+    maxReferences: 9,
+    requiresVideoInput: true,
+    videoFieldName: "video_urls",
+    videoInputIsArray: true,
+    supportsKeepSound: false,
+    aspectRatios: ["16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "16:9",
+    badge: "New",
+    popular: true,
+    tagline: "Restyle or modify an existing clip from a prompt — ByteDance Seedance 2.0",
+  },
   {
     id: "kling-o1-video-edit",
     label: "Kling O1 Video Edit",

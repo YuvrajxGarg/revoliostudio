@@ -13,7 +13,7 @@ import { useComposerStore } from "@/store/composerStore";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 
-const DEFAULT_MODEL_ID = "kling-o1-video-edit";
+const DEFAULT_MODEL_ID = "seedance-2-video-edit";
 
 export function EditVideoComposer({
   onGenerated,
@@ -212,10 +212,15 @@ export function EditVideoComposer({
         className="w-full resize-none rounded-xl border border-border-subtle bg-surface-2 text-sm text-foreground placeholder:text-muted outline-none px-3 py-2"
       />
 
-      <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface-2 px-3 py-2">
-        <span className="text-sm">Keep original sound</span>
-        <Toggle checked={keepSound} onChange={setKeepSound} />
-      </div>
+      {/* Seedance's video-edit has no keep_original_sound field (audio is a
+          separate input), so hide the toggle for models that don't support it
+          rather than show a control that does nothing. */}
+      {model?.supportsKeepSound !== false && (
+        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface-2 px-3 py-2">
+          <span className="text-sm">Keep original sound</span>
+          <Toggle checked={keepSound} onChange={setKeepSound} />
+        </div>
+      )}
 
       <Dropdown
         value={aspectRatio}
