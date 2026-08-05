@@ -17,6 +17,14 @@ function pickMeshyModelId(numImages: number): string {
   return "meshy-multi-image-to-3d";
 }
 
+// Upload cap for the reference tray. Must NOT be read off the currently
+// selected model: at 0 images the auto-picked model is meshy-text-to-3d
+// (maxReferences 0), which would hide the "+ Add" box entirely and make it
+// impossible to attach the first image; at 1 image it's meshy-image-to-3d
+// (cap 1), which would block reaching multi-image. The tray always allows up
+// to the multi-image ceiling, and the model auto-switches by count.
+const MAX_3D_REFS = getModel("meshy-multi-image-to-3d")?.maxReferences ?? 4;
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -78,7 +86,7 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
     try {
       for (const file of Array.from(files)) {
         if (!file.type.startsWith("image/")) continue;
-        const cap = model?.maxReferences ?? 4;
+        const cap = MAX_3D_REFS;
         if (useComposerStore.getState().references.length >= cap) break;
         try {
           const { url } = await uploadReferenceFile(file);
@@ -146,7 +154,7 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
         />
       </Field>
 
-      <Field label={`Image URLs ${hasImages ? "" : "(optional)"}`} hint={`1-${model?.maxReferences ?? 4} reference images from different angles`}>
+      <Field label={`Reference Images ${hasImages ? "" : "(optional)"}`} hint={`Attach 1-${MAX_3D_REFS} images of the object from different angles to build the mesh from`}>
         <div className="grid grid-cols-4 gap-2">
           {references.map((ref) => (
             <div key={ref.id} className="relative aspect-square rounded-lg overflow-hidden border border-border-subtle group">
@@ -160,7 +168,7 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
               </button>
             </div>
           ))}
-          {references.length < (model?.maxReferences ?? 4) && (
+          {references.length < MAX_3D_REFS && (
             <button
               onClick={() => inputRef.current?.click()}
               className="aspect-square rounded-lg border border-dashed border-border-subtle flex flex-col items-center justify-center gap-1 text-muted hover:text-foreground hover:border-foreground/40 transition-colors"
@@ -181,13 +189,13 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
             e.target.value = "";
           }}
         />
-        <span className="text-[11px] text-muted">{references.length}/{model?.maxReferences ?? 4} items</span>
+        <span className="text-[11px] text-muted">{references.length}/{MAX_3D_REFS} items</span>
       </Field>
 
       {hasImages && (
-        <Field label="Generate Texture" hint="Generate textures alongside the mesh.">
+        <Field label="Use Image Texture" hint="Textures the mesh from your reference image so the model reuses the photo's colors and surface look. Turn off for an untextured (grey) mesh.">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted">Adds a textured material pass</span>
+            <span className="text-xs text-muted">Reuse the uploaded photo&apos;s look as the texture</span>
             <Toggle checked={shouldTexture} onChange={(v) => updateSettings({ shouldTexture: v })} />
           </div>
         </Field>
