@@ -49,6 +49,7 @@ export interface CostEstimateSettings {
 // no duration/numImages to scale against), pulled from muapi's own catalog
 // `cost` field rather than the duration-based video heuristic below.
 const ENHANCE_COST_USD: Record<string, number> = {
+  "topaz-video-upscale": 0.4,
   "topaz-image-upscale": 0.075,
   "ai-image-upscaler": 0.02,
   "ai-video-upscaler": 0.03,
@@ -78,17 +79,46 @@ const ENHANCE_COST_USD: Record<string, number> = {
 // Verified against every video model's live schema too (see below) — 44 of
 // 52 image models in the registry fetched cleanly; the 6 that returned an
 // empty body (flux-dev, flux-schnell, hidream-fast/dev/full, seededit,
-// midjourney-edit) likely have retired/renamed slugs on muapi's side and
-// still fall back to the provider-tier heuristic below until their real
-// slug is confirmed. (seedream-5's old guessed slug was in this list too —
+// midjourney-edit) were assumed to be retired/renamed slugs. RESOLVED: they
+// were never retired. Each has a live catalog entry under a DIFFERENT key
+// than its POST route (flux-dev-image submits fine but only flux-dev is a
+// valid GET key), so the schema fetch 404'd while generation kept working.
+// models.ts now carries the split via submitEndpoint and their real costs
+// are in the table below. (seedream-5's old guessed slug was in this list too —
 // fixed by pointing it at the real muapi.ai/seedream endpoints below.
 // seedream-v4-edit was also in this list for the same reason — its
 // registered slug had "edit"/"v4" in the wrong order — fixed by correcting
 // the slug in models.ts; its real cost is confirmed flat $0.04/image,
 // matching the base t2i model, via a live schema fetch.)
 const IMAGE_FLAT_COST_USD: Record<string, number> = {
-  "flux-2-klein-4b-turbo-edit": 0.0078,
-  "flux-2-klein-4b-edit": 0.0156,
+  // ── 2026-08 catalog sweep additions (costs from live GET /models) ──
+  "flux-3": 0.05,
+  "flux-3-dev": 0.025,
+  "flux-3-edit": 0.06,
+  "qwen3-image": 0.03,
+  "qwen-image-2-edit": 0.04,
+  "flux-2-klein-4b-turbo": 0.0104,
+  "flux-2-dev-edit": 0.031,
+  "nano-banana-2-lite": 0.03,
+  "flux-kontext-pro": 0.03,
+  "wan2.7-edit-pro": 0.1,
+  // These 7 are the models the comment above flagged as "returned an empty
+  // body ... likely retired/renamed slugs". They were never retired — their
+  // catalog GET key just differs from their POST route (now split via
+  // submitEndpoint in models.ts), so the schema fetch 404'd and they fell
+  // back to the provider-tier heuristic. Real catalog costs:
+  "flux-dev": 0.015,
+  "flux-schnell": 0.003,
+  "hidream-fast": 0.008,
+  "hidream-dev": 0.02,
+  "hidream-full": 0.04,
+  seededit: 0.03,
+  "midjourney-edit": 0.1,
+  // The whole Klein 4b tier bills a flat $0.0104, same as the 9b turbo below
+  // — confirmed on live estimate-cost. The 0.0078/0.0156 pair here looked
+  // like a turbo-vs-standard split that muapi doesn't actually charge.
+  "flux-2-klein-4b-turbo-edit": 0.0104,
+  "flux-2-klein-4b-edit": 0.0104,
   "flux-2-klein-9b-turbo-edit": 0.0104,
   "nano-banana": 0.03,
   "nano-banana-edit": 0.03,
@@ -187,41 +217,102 @@ const IMAGE_FLAT_COST_USD: Record<string, number> = {
 // "Seedance 2.0" (seedance-2-t2v, text-to-video): heuristic showed $0.17
 // for 5s, real rate is $0.25/sec ($1.25 for 5s).
 const VIDEO_PER_SECOND_COST_USD: Record<string, number> = {
+  // ── 2026-08 catalog sweep additions ──
+  // rate = live cost at the model's default duration / that duration.
+  // Live: 5s=$0.95, 8s=$1.52, 10s=$1.90 -> exactly 0.19/sec. The catalog
+  // `cost` field said $0.104, which is not what the account is billed.
+  "ltx-2.3-t2v": 0.19,
+  "ltx-2.3-i2v": 0.19,
+  "kling-v2.5-turbo-pro-t2v": 0.09,
+  "kling-o1-t2v": 0.144,
+  "kling-o1-i2v": 0.144,
+  "kling-v3-turbo-std-t2v": 0.112,
+  "kling-v3-turbo-pro-i2v": 0.14,
+  "kling-v3-omni-std-i2v": 0.084,
+  "minimax-2.3-std-i2v": 0.1825,
+  "minimax-h3-open-t2v": 0.052,
+  "seedance-2-mini-t2v": 0.15,
+  "seedance-pro-t2v-fast": 0.03,
+  "vidu-q3-turbo-i2v": 0.06,
+  "seedance-2.5-video-edit-480p": 0.17,
+  // Live: 5s=$0.65, 8s=$1.04, 10s=$1.30 -> 0.13/sec (catalog said flat $0.10).
+  "wan2.7-video-edit": 0.13,
+  "mmaudio-video-sound": 0.001,
   "kling-v2.5-turbo-pro-i2v": 0.09,
   "kling-v2.5-turbo-std-i2v": 0.056,
   "seedance-lite-i2v": 0.02,
   "seedance-pro-i2v-fast": 0.012,
   // Fallback only — seedance-2-mini-i2v's real rate depends on the selected
   // resolution (480p vs 720p) and is handled by VIDEO_RESOLUTION_PER_SECOND_COST_USD
-  // below. This flat 0.08 (480p rate) is only used if settings.resolution is
-  // missing entirely (e.g. the preview estimates in ModelSelector/EditVideoComposer
-  // that call estimateCostUSD with no settings at all).
-  "seedance-2-mini-i2v": 0.08,
+  // below. This is only used if settings.resolution is missing entirely
+  // (e.g. the preview estimates in ModelSelector/EditVideoComposer that call
+  // estimateCostUSD with no settings at all). Was the 480p rate (0.08), but
+  // muapi defaults this model to 720p when no resolution is sent, so the
+  // no-settings preview was showing half the real price — use the 720p rate,
+  // which is what an unmodified submit actually bills.
+  "seedance-2-mini-i2v": 0.15,
   // Seedance 2.0 / sd-2 family — catalog cost $1.25 @ 5s default for
   // i2v/first-last-frame/t2v, $1.50 @ 5s default for omni-reference.
   "seedance-2-t2v": 0.25,
   "seedance-2-i2v": 0.25,
   "seedance-2-flf": 0.25,
   "seedance-2-omni": 0.3,
+  // Seedance 2.5 family — the ENTIRE family was missing from this table and
+  // fell through to baseVideoCostPerSecondUSD's ByteDance heuristic (0.025/s,
+  // or 0.035/s where the label matched /4k/), showing ~$0.13 for clips that
+  // really bill $0.85-$8.50. That is a 7x-49x understatement depending on
+  // tier. Rates below are exact: derived from muapi's authenticated
+  // /models/{slug}/estimate-cost endpoint, which was confirmed to scale
+  // perfectly linearly with duration for every one of these 16 (probed at
+  // 4s/5s/10s — e.g. omni-reference 5s=$1.70, 8s=$2.72, 10s=$3.40 = 0.34/s
+  // exactly). Each resolution tier is a clean 2x step: 480p 0.17, 720p 0.34,
+  // 1080p 0.85, 4K 1.70 — and t2v/i2v/flf/omni all bill identically within a
+  // tier, unlike the 2.0 family where omni costs more than the rest.
+  "seedance-2.5-t2v-480p": 0.17,
+  "seedance-2.5-i2v-480p": 0.17,
+  "seedance-2.5-flf-480p": 0.17,
+  "seedance-2.5-omni-480p": 0.17,
+  "seedance-2.5-t2v": 0.34,
+  "seedance-2.5-i2v": 0.34,
+  "seedance-2.5-flf": 0.34,
+  "seedance-2.5-omni": 0.34,
+  "seedance-2.5-t2v-1080p": 0.85,
+  "seedance-2.5-i2v-1080p": 0.85,
+  "seedance-2.5-flf-1080p": 0.85,
+  "seedance-2.5-omni-1080p": 0.85,
+  "seedance-2.5-t2v-4k": 1.7,
+  "seedance-2.5-i2v-4k": 1.7,
+  "seedance-2.5-flf-4k": 1.7,
+  "seedance-2.5-omni-4k": 1.7,
   "kling-v3-pro-t2v": 0.144,
   "kling-v3-std-t2v": 0.144,
   "kling-v3-pro-i2v": 0.144,
   "kling-v3-std-i2v": 0.144,
-  "veo3.1": 0.3125,
-  "veo3.1-i2v": 0.3125,
-  "veo3.1-ref": 0.075,
-  "veo4": 0.375,
-  "kling-master-t2v": 0.24,
-  "kling-master-i2v": 0.06,
+  // veo3.1 / veo3.1-i2v / veo3.1-ref / veo4 were here as per-second rates
+  // that happened to be exact at their 8s default (0.3125*8 = $2.50) but
+  // wrong at every other duration. The whole Veo family actually bills a
+  // FLAT per-video price — confirmed identical at 4s/5s/8s/10s on the live
+  // estimate-cost endpoint — so they now live in VIDEO_FLAT_COST_USD below.
+  // Same for kling-master-t2v/i2v, which bills flat $1.20.
   "kling-std-i2v": 0.045,
   "kling-pro-i2v": 0.08,
   "kling-v3-4k-t2v": 0.4,
   "kling-v3-4k-i2v": 0.4,
   "kling-v3-omni-t2v": 0.112,
   "kling-v3-omni-i2v": 0.112,
-  "wan2.7-t2v": 0.02,
-  "wan2.7-i2v": 0.02,
-  "wan2.7-ref": 0.02,
+  // Was 0.02/sec for all three — a 6.5x understatement. Live estimate-cost:
+  // t2v/i2v are exactly 0.13/sec (4s=$0.52, 5s=$0.65, 8s=$1.04, linear).
+  "wan2.7-t2v": 0.13,
+  "wan2.7-i2v": 0.13,
+  // wan2.7-ref is the one model here that is NOT a pure per-second rate: it
+  // bills a $0.50 flat base plus $0.13/sec (3s=$0.89, 5s=$1.15, 10s=$1.80 —
+  // fits cost = 0.50 + 0.13d exactly). This table can only express a single
+  // rate, so 0.23 is chosen to be exact at the 5s default; it over-states
+  // above that (10s shows $2.30 vs $1.80 real) and under-states below it.
+  // Erring high on the long end is the safe direction for a displayed
+  // estimate. If base+rate models become common, extend the estimator
+  // rather than stretching this number.
+  "wan2.7-ref": 0.23,
   "seedance-pro-t2v": 0.036,
   "seedance-pro-i2v": 0.036,
   "seedance-2-vip-t2v": 0.3,
@@ -291,11 +382,39 @@ const IMAGE_RESOLUTION_FLAT_COST_USD: Record<string, Record<string, number>> = {
 // change what muapi actually bills and the cost should never be multiplied
 // by the selected duration.
 const VIDEO_FLAT_COST_USD: Record<string, number> = {
-  // Was 2.5 — a 5x overcharge. muapi.ai/veo3 states directly: "Veo 3 Text to
-  // Video / Image to Video ~$0.50/video". Confirmed via live audit against
-  // muapi's own pricing page (2026).
-  veo3: 0.5,
-  "veo3-i2v": 0.5,
+  // ── 2026-08 catalog sweep additions (no duration field in schema) ──
+  // NB: every one of these four differed from the catalog `cost` field and
+  // was corrected against live estimate-cost with a real input supplied.
+  "hunyuan-fast-t2v": 0.05,
+  // Veo family bills flat; Lite is $0.30 at every duration (schema pins 8s).
+  "veo3.1-lite-t2v": 0.3,
+  "veo3.1-lite-i2v": 0.3,
+  "runway-aleph": 0.9,
+  "video-background-remover": 0.05,
+  // These were set to 0.50 on the strength of muapi's public pricing PAGE
+  // ("Veo 3 Text to Video / Image to Video ~$0.50/video"). That page
+  // disagrees with what the account is actually billed: muapi's own
+  // authenticated /models/veo3-text-to-video/estimate-cost returns $2.50 —
+  // flat, identical at 4s/5s/8s/10s — and veo3-image-to-video likewise.
+  // The live endpoint is what the bill is computed from, so it wins over the
+  // marketing page. $2.50 also lines up with the rest of the family
+  // (veo3.1 $2.50, veo4 $3.00) in a way that $0.50 never did.
+  // Re-check here first if muapi's Veo pricing is ever disputed.
+  veo3: 2.5,
+  "veo3-i2v": 2.5,
+  // Whole Veo family bills flat per video, not per second — see the note in
+  // VIDEO_PER_SECOND_COST_USD above. Verified 4s/5s/8s/10s all identical.
+  "veo3.1": 2.5,
+  "veo3.1-i2v": 2.5,
+  "veo3.1-ref": 0.6,
+  veo4: 3.0,
+  "veo4-i2v": 3.0,
+  // Flat $1.20 for any duration up to 8s, stepping to $2.40 at 10s (muapi
+  // prices Master in two duration tiers rather than per-second). This table
+  // holds one number, so it carries the $1.20 tier that covers the 5s
+  // default and every shorter option; a 10s selection under-states by 2x.
+  "kling-master-t2v": 1.2,
+  "kling-master-i2v": 1.2,
   "hunyuan-t2v": 0.15,
   "hunyuan-i2v": 0.15,
   "minimax-2.3-pro-t2v": 0.63,
@@ -326,8 +445,15 @@ const VIDEO_FLAT_COST_USD: Record<string, number> = {
   "kling-v2.6-std-motion-control": 0.45,
   "ai-dance-effects": 0.3,
   "ai-video-face-swap": 0.1,
-  "luma-flash-reframe": 0.35,
-  autocrop: 0.05,
+  // Was absent entirely and fell through to the Alibaba per-second heuristic
+  // (~$0.13). Catalog prices wan2.2-animate flat at $0.35; its length is
+  // driven by the input clip, so there's no duration to scale by.
+  "wan-animate": 0.35,
+  // Both corrected against live estimate-cost (flat, duration-independent):
+  // luma-flash-reframe was 0.35 but really bills $0.25 (a 1.4x overcharge to
+  // the user), and autocrop was 0.05 against a real $0.10 (2x under).
+  "luma-flash-reframe": 0.25,
+  autocrop: 0.1,
 };
 
 // Audio models — not independently confirmed against a live authenticated
@@ -335,9 +461,16 @@ const VIDEO_FLAT_COST_USD: Record<string, number> = {
 // models.ts), so these are rough placeholders based on typical wrapper-API
 // pricing for Suno-style full-song generation vs. MMAudio-style short
 // clips, clearly rougher than the rest of this file's verified numbers.
+const THREED_FLAT_COST_USD: Record<string, number> = {
+  "tripo-h31-t23d": 0.2,
+};
+
 const AUDIO_FLAT_COST_USD: Record<string, number> = {
   "suno-music": 0.12,
-  "mmaudio-text-to-audio": 0.02,
+  // Catalog lists mmaudio-v2-text-to-audio at a flat $0.01; this was 0.02,
+  // a 2x overcharge. (estimate-cost can't price this one without a real
+  // input, so the catalog `cost` field is the source here.)
+  "mmaudio-text-to-audio": 0.01,
 };
 
 /** Rough estimated cost in USD for one generate click with the given settings. */
@@ -346,7 +479,10 @@ export function estimateCostUSD(model: ModelConfig, settings: CostEstimateSettin
     return ENHANCE_COST_USD[model.id];
   }
   if (model.category === "3d") {
-    return model.provider === "Meshy" ? 0.5 : 0.4;
+    // Was a flat Meshy-or-not guess (0.5 / 0.4). Tripo's H3.1 models are
+    // really $0.20-$0.30, so a per-model table is needed now that 3D has
+    // more than one provider. Falls back to the old 0.4 for anything new.
+    return THREED_FLAT_COST_USD[model.id] ?? (model.provider === "Meshy" ? 0.5 : 0.4);
   }
   if (model.category === "audio") {
     return AUDIO_FLAT_COST_USD[model.id] ?? 0.05;

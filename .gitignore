@@ -18,6 +18,9 @@ dist
 
 # misc
 .DS_Store
+# macOS AppleDouble sidecars — created whenever the repo is edited from macOS
+# on a non-HFS volume (exFAT/NTFS). Junk metadata, never source.
+._*
 *.log
 npm-debug.log*
 .turbo
