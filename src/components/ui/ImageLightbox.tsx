@@ -47,7 +47,11 @@ export function ImageLightbox({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-6" onClick={onClose}>
+    // z-[140]: above every modal layer (dialogs are z-[110], Compare/Confirm
+    // z-[120]) — this viewer is often opened from INSIDE one of those (e.g.
+    // viewing a reference full-size from the prompt editor), and at its old
+    // z-[100] it rendered behind the very modal that opened it.
+    <div className="fixed inset-0 z-[140] bg-black/90 flex items-center justify-center p-6" onClick={onClose}>
       <button
         onClick={onClose}
         title="Close"

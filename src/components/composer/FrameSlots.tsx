@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Eye, ImageUp, Trash2 } from "lucide-react";
 import { useComposerStore } from "@/store/composerStore";
 import { nanoid } from "nanoid";
 import { uploadReferenceFile } from "@/lib/upload";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 
 function Slot({
   label,
@@ -22,10 +23,28 @@ function Slot({
   onView: (url: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Right-click actions on a filled slot. "Replace image" reuses the same
+  // hidden file input — onUpload's setter overwrites the frame in place.
+  const menuItems: ContextMenuItem[] = url
+    ? [
+        { label: "Replace image", icon: <ImageUp className="h-4 w-4" />, onClick: () => inputRef.current?.click() },
+        { label: "View full size", icon: <Eye className="h-4 w-4" />, onClick: () => onView(url) },
+        { label: "Remove", icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onClick: onClear },
+      ]
+    : [];
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="relative h-16 w-16 rounded-lg overflow-hidden border border-border-subtle">
+      <div
+        className="relative h-16 w-16 rounded-lg overflow-hidden border border-border-subtle"
+        onContextMenu={(e) => {
+          if (!url) return;
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         {url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -62,8 +81,11 @@ function Slot({
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onUpload(f);
+          // Reset so picking the same file again still fires onChange.
+          e.target.value = "";
         }}
       />
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   );
 }

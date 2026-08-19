@@ -127,6 +127,8 @@ interface ComposerState extends ComposerSlice {
   addReference: (url: string, name?: string, max?: number, category?: string, promptModifier?: string) => ReferenceImage | null;
   removeReference: (id: string) => void;
   renameReference: (id: string, name: string) => void;
+  /** Swaps a reference's image in place — keeps its id, name, and category so any @-mention of it in the prompt stays valid. */
+  replaceReference: (id: string, url: string) => void;
   setStartFrame: (ref: ReferenceImage | null) => void;
   setEndFrame: (ref: ReferenceImage | null) => void;
   setVideoReference: (ref: ReferenceImage | null) => void;
@@ -179,6 +181,10 @@ export const useComposerStore = create<ComposerState>()(
           references: get().references.map((r) => (r.id === id ? { ...r, name: trimmed } : r)),
         });
       },
+      replaceReference: (id, url) =>
+        set({
+          references: get().references.map((r) => (r.id === id ? { ...r, url } : r)),
+        }),
 
       setStartFrame: (ref) => set({ startFrame: ref }),
       setEndFrame: (ref) => set({ endFrame: ref }),

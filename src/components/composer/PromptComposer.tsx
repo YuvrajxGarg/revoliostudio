@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, Plus, SquarePen, Video, X } from "lucide-react";
+import { ArrowUp, Eye, Loader2, Plus, SquarePen, Trash2, Video, X } from "lucide-react";
 import { useComposerStore, type ActivePreset } from "@/store/composerStore";
 import { Category, DEFAULT_MODEL_ID, EDIT_COUNTERPART, ModelConfig, modelsByCategory } from "@/lib/models";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,8 @@ import { estimateCostUSD, formatCostUSD, formatCostINR } from "@/lib/pricing";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 import type { ModelSchemaInfo } from "@/lib/model-schema-types";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 
 // Reuses the exact same category lists ReferencePicker's own left nav uses,
 // so adding a category there automatically shows up here too. Kept as two
@@ -240,13 +242,37 @@ function VideoReferenceSlot({
   onClear: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [viewing, setViewing] = useState(false);
+
+  // Right-click actions on a filled slot. "Replace video" reuses the same
+  // hidden file input — onUpload overwrites the slot in place.
+  const menuItems: ContextMenuItem[] = video
+    ? [
+        { label: "Replace video", icon: <Video className="h-4 w-4" />, onClick: () => inputRef.current?.click() },
+        { label: "View full size", icon: <Eye className="h-4 w-4" />, onClick: () => setViewing(true) },
+        { label: "Remove", icon: <Trash2 className="h-4 w-4" />, danger: true, separatorBefore: true, onClick: onClear },
+      ]
+    : [];
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="panel-label">Video reference (optional)</div>
       {video ? (
-        <div className="relative rounded-xl overflow-hidden border border-border-subtle bg-surface-2">
+        <div
+          className="relative rounded-xl overflow-hidden border border-border-subtle bg-surface-2"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY });
+          }}
+        >
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <video src={video.url} muted loop playsInline autoPlay className="w-full h-24 object-cover" />
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+            </div>
+          )}
           <button
             onClick={onClear}
             title="Remove video reference"
@@ -256,22 +282,30 @@ function VideoReferenceSlot({
           </button>
         </div>
       ) : (
-        <label className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border-subtle bg-surface-2 py-3 text-center text-muted hover:text-foreground hover:border-foreground/40 transition-colors cursor-pointer">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border-subtle bg-surface-2 py-3 text-center text-muted hover:text-foreground hover:border-foreground/40 transition-colors cursor-pointer"
+        >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
           <span className="text-xs">Add a motion/scene video</span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onUpload(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        </button>
       )}
+      {/* Lives outside the empty-state label so "Replace video" from the
+          right-click menu can reach it while the slot is filled too. */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onUpload(f);
+          e.target.value = "";
+        }}
+      />
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+      {viewing && video && <ImageLightbox url={video.url} mediaType="video" onClose={() => setViewing(false)} />}
     </div>
   );
 }

@@ -1,12 +1,13 @@
 "use client";
 
 import { Fragment, useRef, useState } from "react";
-import { Plus, X, Pencil, type LucideIcon } from "lucide-react";
+import { Plus, X, Pencil, Eye, ImageUp, Link2, Trash2, type LucideIcon } from "lucide-react";
 import { useComposerStore } from "@/store/composerStore";
 import type { ReferenceImage } from "@/lib/types";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 
 export interface ReferenceQuickPick {
   id: string;
@@ -25,6 +26,7 @@ function RefThumb({
   onCancelEdit,
   onRemove,
   onView,
+  onContextMenu,
   onAddMore,
 }: {
   item: ReferenceImage;
@@ -36,6 +38,8 @@ function RefThumb({
   onCancelEdit: () => void;
   onRemove: () => void;
   onView: () => void;
+  /** Right-click on the tile — opens the actions menu (replace/view/rename/remove). */
+  onContextMenu: (e: React.MouseEvent) => void;
   /** Only set on the last tile of a category group — opens the picker to add another to this same category, rather than a separate tile taking up its own spot in the row. */
   onAddMore?: () => void;
 }) {
@@ -45,7 +49,7 @@ function RefThumb({
           box (as siblings in the outer `relative group`, not this one) —
           nesting them inside the same overflow-hidden container as the
           image clips off the part that pokes past the corner. */}
-      <div className="group relative h-14 w-14 shrink-0">
+      <div className="group relative h-14 w-14 shrink-0" onContextMenu={onContextMenu}>
         <div className="h-full w-full overflow-hidden rounded-lg border border-border-subtle">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -114,12 +118,17 @@ export function ReferenceTray({
   tagCategories?: ReferenceQuickPick[];
   onOpenCategory?: (id: string) => void;
 }) {
-  const { references, addReference, removeReference, renameReference } = useComposerStore();
+  const { references, addReference, removeReference, renameReference, replaceReference } = useComposerStore();
   const inputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [viewingUrl, setViewingUrl] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; ref: ReferenceImage } | null>(null);
+  // Which reference the pending replace file-pick belongs to — set when
+  // "Replace image" is clicked in the menu, consumed by handleReplaceFile.
+  const replacingIdRef = useRef<string | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -139,6 +148,47 @@ export function ReferenceTray({
         setError(err instanceof Error ? err.message : "Failed to upload image — check your connection and try again");
       }
     }
+  }
+
+  async function handleReplaceFile(files: FileList | null) {
+    const file = files?.[0];
+    const targetId = replacingIdRef.current;
+    replacingIdRef.current = null;
+    if (!file || !targetId || !file.type.startsWith("image/")) return;
+    setError(null);
+    try {
+      const { url } = await uploadReferenceFile(file);
+      replaceReference(targetId, url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload image — check your connection and try again");
+    }
+  }
+
+  function buildMenuItems(ref: ReferenceImage): ContextMenuItem[] {
+    return [
+      {
+        label: "Replace image",
+        icon: <ImageUp className="h-4 w-4" />,
+        onClick: () => {
+          replacingIdRef.current = ref.id;
+          replaceInputRef.current?.click();
+        },
+      },
+      { label: "View full size", icon: <Eye className="h-4 w-4" />, onClick: () => setViewingUrl(ref.url) },
+      { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => startEditing(ref.id, ref.name) },
+      {
+        label: "Copy image URL",
+        icon: <Link2 className="h-4 w-4" />,
+        onClick: () => navigator.clipboard?.writeText(ref.url).catch(() => {}),
+      },
+      {
+        label: "Remove",
+        icon: <Trash2 className="h-4 w-4" />,
+        danger: true,
+        separatorBefore: true,
+        onClick: () => removeReference(ref.id),
+      },
+    ];
   }
 
   function startEditing(id: string, currentName: string) {
@@ -207,6 +257,10 @@ export function ReferenceTray({
                   onCancelEdit={() => setEditingId(null)}
                   onRemove={() => removeReference(ref.id)}
                   onView={() => setViewingUrl(ref.url)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, ref });
+                  }}
                   onAddMore={!atMax && i === items.length - 1 ? () => onOpenCategory?.(cat.id) : undefined}
                 />
               ))}
@@ -241,13 +295,29 @@ export function ReferenceTray({
               onCancelEdit={() => setEditingId(null)}
               onRemove={() => removeReference(ref.id)}
               onView={() => setViewingUrl(ref.url)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ x: e.clientX, y: e.clientY, ref });
+              }}
             />
           ))}
 
         <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+        <input
+          ref={replaceInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            handleReplaceFile(e.target.files);
+            // Reset so picking the same file again still fires onChange.
+            e.target.value = "";
+          }}
+        />
       </div>
       {error && <div className="px-1 text-[11px] text-danger-text">{formatErrorMessage(error).message}</div>}
       {viewingUrl && <ImageLightbox url={viewingUrl} onClose={() => setViewingUrl(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={buildMenuItems(menu.ref)} onClose={() => setMenu(null)} />}
     </div>
   );
 }

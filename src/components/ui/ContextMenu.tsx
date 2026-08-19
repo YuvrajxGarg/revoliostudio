@@ -17,6 +17,11 @@ export interface ContextMenuItem {
  * A small right-click menu rendered at a screen position, portaled to
  * <body>. Closes on outside click, scroll, resize, or Escape. Flips back
  * on-screen if it would overflow the viewport edge.
+ *
+ * z-[150] is deliberately the single topmost layer in the app — a
+ * right-click menu must never open behind whatever it was invoked from,
+ * including the ImageLightbox (z-[140]) and every modal below it
+ * (dialogs z-[110], Compare/Confirm z-[120]).
  */
 export function ContextMenu({
   x,
@@ -69,7 +74,7 @@ export function ContextMenu({
     <div
       ref={ref}
       style={{ left: pos.x, top: pos.y }}
-      className="animate-menu-pop-in fixed z-[130] min-w-[11rem] rounded-xl border border-border-subtle bg-surface p-1 shadow-2xl"
+      className="animate-menu-pop-in fixed z-[150] min-w-[11rem] rounded-xl border border-border-subtle bg-surface p-1 shadow-2xl"
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, i) => (
