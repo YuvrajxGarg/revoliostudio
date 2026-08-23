@@ -371,7 +371,10 @@ export function EffectsStudioView() {
       : null;
 
   return (
-    <div className="flex-1 flex min-h-0 gap-3 px-3 pb-3 pt-3">
+    // Below lg the three fixed columns (260px effects + preview + 280px
+    // controls) can't fit side by side, so the whole studio stacks into one
+    // scrollable column instead.
+    <div className="flex-1 flex min-h-0 gap-3 px-3 pb-3 pt-3 flex-col lg:flex-row overflow-y-auto lg:overflow-visible">
       <SourcePanel
         sourceName={source?.file.name ?? null}
         onUpload={handleUpload}
@@ -381,7 +384,7 @@ export function EffectsStudioView() {
         onSelectEffect={handleSelectEffect}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle bg-surface/30 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-[50vh] lg:min-h-0 shrink-0 lg:shrink rounded-2xl border border-border-subtle bg-surface/30 overflow-hidden">
         <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-2.5 shrink-0">
           <span className="text-sm font-medium truncate">{source?.file.name ?? "Effects Studio"}</span>
           <div className="flex items-center gap-2 shrink-0">

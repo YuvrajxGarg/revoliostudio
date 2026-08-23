@@ -708,6 +708,10 @@ export const MODELS: ModelConfig[] = [
     mode: "i2v",
     endpoint: "kling-v3.0-pro-image-to-video",
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08
+    // audit) — same shape as Kling v3 4K.
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -725,6 +729,9 @@ export const MODELS: ModelConfig[] = [
     mode: "i2v",
     endpoint: "kling-v3.0-standard-image-to-video",
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08 audit).
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -1554,13 +1561,16 @@ export const MODELS: ModelConfig[] = [
     category: "image",
     mode: "i2i",
     endpoint: "nano-banana-effects",
-    imageInputKey: "images_list",
-    maxReferences: 4,
+    // Real schema takes a single "image_url" — was wrongly set to
+    // "images_list" (doesn't exist on this endpoint), and it has no
+    // num_images field either (2026-08 audit). Its signature "name"
+    // effect-preset enum (~17 presets) surfaces via the generic
+    // live-schema extras (see src/lib/extra-params.ts).
+    imageInputKey: "image_url",
+    maxReferences: 1,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
-    supportsNumImages: true,
-    maxNumImages: 4,
-    tagline: "More from the muapi catalog",
+    tagline: "Apply a preset effect (3D figurine, action figure, famous art…) to a photo",
   },
   {
     id: "kling-o1-edit",
@@ -1940,6 +1950,9 @@ export const MODELS: ModelConfig[] = [
     mode: "i2v",
     endpoint: "seedance-lite-i2v",
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08 audit).
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2004,6 +2017,9 @@ export const MODELS: ModelConfig[] = [
     mode: "i2v",
     endpoint: "veo3.1-image-to-video",
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08 audit).
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2072,6 +2088,9 @@ export const MODELS: ModelConfig[] = [
     mode: "i2v",
     endpoint: "kling-v2.1-pro-i2v",
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08 audit).
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2142,6 +2161,9 @@ export const MODELS: ModelConfig[] = [
     // Real schema takes a single "image_url" — was wrongly set to
     // "images_list", which doesn't exist on this endpoint.
     imageInputKey: "image_url",
+    // Live schema also takes an optional "last_image" end frame (2026-08 audit).
+    supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     maxReferences: 1,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2257,9 +2279,12 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "flf",
     endpoint: "pixverse-v6-transition",
-    imageInputKey: "images_list",
+    // Real schema takes "image_url" + "last_image" — was wrongly set to an
+    // "images_list" array this endpoint doesn't have (2026-08 audit).
+    imageInputKey: "image_url",
     maxReferences: 2,
     supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
     durations: [5, 8],
@@ -2291,9 +2316,12 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "flf",
     endpoint: "vidu-q3-pro-first-last-frames",
-    imageInputKey: "images_list",
+    // Real schema takes "image_url" + "last_image" — was wrongly set to an
+    // "images_list" array this endpoint doesn't have (2026-08 audit).
+    imageInputKey: "image_url",
     maxReferences: 2,
     supportsStartEndFrame: true,
+    endFrameFieldName: "last_image",
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
     durations: [4, 8],

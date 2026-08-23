@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Minus, MicOff, Plus, Proportions, Sparkles, Tag, Volume2 } from "lucide-react";
+import { Dices, Minus, MicOff, Plus, Proportions, Sparkles, Tag, Volume2 } from "lucide-react";
 import { ModelConfig } from "@/lib/models";
 import { useComposerStore } from "@/store/composerStore";
 import { Dropdown } from "@/components/ui/Dropdown";
@@ -73,15 +73,36 @@ export function SettingsBar({
 }) {
   const { settings, updateSettings } = useComposerStore();
 
-  // Prefer live duration constraints from muapi's own schema (a real
-  // slider, min-to-max); fall back to the model's static discrete list if
-  // the schema fetch hasn't resolved or failed.
+  const schemaOk = !!schema && !schema.error;
+
+  // Aspect ratios: once the live schema loads, it's ground truth BOTH ways —
+  // it widens registry lists that hardcode fewer ratios than the API
+  // accepts, and it hides the dropdown entirely for "ghost" models whose
+  // schema has no aspect_ratio concept at all (a 2026-08 audit found 72 of
+  // the former and 33 of the latter). Width/height-sized models get a
+  // synthetic list (see sizeFromAspectRatio on ModelSchemaInfo). While the
+  // schema is loading or errored, the registry list keeps working as before.
+  const aspectRatios = schemaOk ? schema.aspectRatios : (model?.aspectRatios ?? null);
+  const defaultAspectRatio = (schemaOk ? schema.defaultAspectRatio : model?.defaultAspectRatio) ?? aspectRatios?.[0];
+
+  // Prefer live duration constraints from muapi's own schema — a real
+  // min-to-max slider when the schema has bounds, or its discrete enum
+  // (which several models publish wider than the registry's static list,
+  // e.g. Sora 2's 4–20s vs the registry's 5/10). A schema-confirmed model
+  // with NO duration field at all hides the control; registry list is the
+  // loading/error fallback.
   const durationSlider = schema?.duration;
-  const durationOptions = model?.durations;
-  const currentDuration = settings.duration ?? durationSlider?.default ?? model?.defaultDuration;
+  const durationOptions = schemaOk
+    ? schema.hasDurationField
+      ? (schema.durationOptions ?? model?.durations ?? null)
+      : null
+    : (model?.durations ?? null);
+  const currentDuration =
+    settings.duration ?? durationSlider?.default ?? (schemaOk ? schema.defaultDuration : null) ?? model?.defaultDuration;
 
   const resolutionOptions = schema?.resolutions;
   const maxNumImages = (schema && !schema.error ? schema.maxNumImages : null) ?? model?.maxNumImages ?? 4;
+  const extraParams = settings.extraParams ?? {};
 
   // These three effects all guard against the SAME bug: settings.* are
   // single shared fields in the composer store, not per-model. Switching
@@ -106,29 +127,65 @@ export function SettingsBar({
   }, [resolutionOptions, schema?.defaultResolution, settings.resolution, updateSettings]);
 
   useEffect(() => {
-    if (!model?.aspectRatios || model.aspectRatios.length === 0) return;
-    if (settings.aspectRatio && model.aspectRatios.includes(settings.aspectRatio)) return;
-    const def = model.defaultAspectRatio ?? model.aspectRatios[0];
-    if (def) updateSettings({ aspectRatio: def });
-  }, [model?.aspectRatios, model?.defaultAspectRatio, settings.aspectRatio, updateSettings]);
+    if (!aspectRatios || aspectRatios.length === 0) return;
+    if (settings.aspectRatio && aspectRatios.includes(settings.aspectRatio)) return;
+    if (defaultAspectRatio) updateSettings({ aspectRatio: defaultAspectRatio });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aspectRatios?.join(","), defaultAspectRatio, settings.aspectRatio, updateSettings]);
+
+  // Same stale-value guard for duration now that its option list is
+  // schema-driven too (e.g. 20s picked on Sora 2, then switching to a
+  // 5/10-only model).
+  useEffect(() => {
+    if (!durationOptions || durationOptions.length === 0) return;
+    if (settings.duration != null && durationOptions.includes(settings.duration)) return;
+    const def =
+      (schemaOk ? schema.defaultDuration : null) ?? model?.defaultDuration ?? durationOptions[0];
+    if (def != null) updateSettings({ duration: def });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [durationOptions?.join(","), settings.duration, updateSettings]);
 
   useEffect(() => {
     if (settings.numImages > maxNumImages) updateSettings({ numImages: maxNumImages });
   }, [maxNumImages, settings.numImages, updateSettings]);
 
+  // Prune extraParams whenever the schema changes: drop keys the current
+  // model's live schema doesn't expose (or whose enum no longer contains
+  // the stored value) so a toggle flipped on Seedance can't ride into a
+  // Kling submit. Same single-shared-store reasoning as the effects above.
+  useEffect(() => {
+    if (!schemaOk) return;
+    const current = settings.extraParams;
+    if (!current || Object.keys(current).length === 0) return;
+    const next: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(current)) {
+      if (schema.extraBooleans.some((d) => d.field === key) && typeof value === "boolean") next[key] = value;
+      else if (schema.extraEnums.some((d) => d.field === key && d.values.includes(String(value)))) next[key] = value;
+      else if (schema.extraNumbers.some((d) => d.field === key) && typeof value === "number") next[key] = value;
+    }
+    if (Object.keys(next).length !== Object.keys(current).length) {
+      updateSettings({ extraParams: next });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemaOk, schema?.extraBooleans, schema?.extraEnums, schema?.extraNumbers, settings.extraParams, updateSettings]);
+
+  function setExtra(field: string, value: string | number | boolean) {
+    updateSettings({ extraParams: { ...(settings.extraParams ?? {}), [field]: value } });
+  }
+
   if (!model) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {model.aspectRatios && model.aspectRatios.length > 0 && (
+      {aspectRatios && aspectRatios.length > 0 && (
         <Dropdown
           icon={<Proportions className="h-3 w-3 text-muted shrink-0" />}
           value={
-            settings.aspectRatio && model.aspectRatios.includes(settings.aspectRatio)
+            settings.aspectRatio && aspectRatios.includes(settings.aspectRatio)
               ? settings.aspectRatio
-              : model.defaultAspectRatio ?? model.aspectRatios[0]
+              : defaultAspectRatio ?? aspectRatios[0]
           }
-          options={model.aspectRatios.map((ar) => ({
+          options={aspectRatios.map((ar) => ({
             value: ar,
             label: RATIO_NAMES[ar] ? `${ar} — ${RATIO_NAMES[ar]}` : ar,
             icon: <AspectRatioIcon ratio={ar} />,
@@ -247,6 +304,80 @@ export function SettingsBar({
           <Toggle
             checked={settings.transparentBackground ?? false}
             onChange={(v) => updateSettings({ transparentBackground: v })}
+          />
+        </div>
+      )}
+
+      {/* ── Generic live-schema extras (see src/lib/extra-params.ts) ──────
+          Everything below is driven entirely by the whitelisted subset of
+          the model's live schema — no per-model wiring. This is how e.g.
+          Seedance 2.5's high-bitrate toggle, gpt-image-2's quality picker,
+          Midjourney's stylize/chaos/weird sliders, and nano-banana-effects'
+          preset dropdown all surface. */}
+
+      {schemaOk &&
+        schema.extraEnums.map((d) => (
+          <Dropdown
+            key={d.field}
+            value={String(extraParams[d.field] ?? d.default)}
+            options={d.values.map((v) => ({ value: v, label: v }))}
+            onChange={(v) => setExtra(d.field, v)}
+            panelTitle={d.label}
+            direction={direction}
+          />
+        ))}
+
+      {schemaOk &&
+        schema.extraBooleans.map((d) => (
+          <div key={d.field} className="control-pill">
+            <span>{d.label}</span>
+            <Toggle
+              checked={(extraParams[d.field] as boolean | undefined) ?? d.default}
+              onChange={(v) => setExtra(d.field, v)}
+            />
+          </div>
+        ))}
+
+      {schemaOk &&
+        schema.extraNumbers.map((d) => (
+          <div key={d.field} className="control-pill" title={`${d.label} (${d.min}–${d.max})`}>
+            <span>{d.label}</span>
+            <input
+              type="range"
+              min={d.min}
+              max={d.max}
+              step={d.step}
+              value={Number(extraParams[d.field] ?? d.default)}
+              onChange={(e) => setExtra(d.field, Number(e.target.value))}
+              className="w-20 slider-thin"
+            />
+            <span className="tabular-nums min-w-[2rem] text-right">{Number(extraParams[d.field] ?? d.default)}</span>
+          </div>
+        ))}
+
+      {schemaOk && schema.negativePromptField && (
+        <div className="control-pill" title="What the model should avoid">
+          <input
+            type="text"
+            value={settings.negativePrompt ?? ""}
+            onChange={(e) => updateSettings({ negativePrompt: e.target.value })}
+            placeholder="Negative prompt (optional)"
+            className="w-36 bg-transparent text-xs outline-none placeholder:text-muted"
+          />
+        </div>
+      )}
+
+      {schemaOk && schema.seedField && (
+        <div className="control-pill" title="Seed — same seed + same prompt reproduces a result. Blank = random.">
+          <Dices className="h-3 w-3 text-muted shrink-0" />
+          <input
+            type="number"
+            value={settings.seed ?? ""}
+            onChange={(e) =>
+              updateSettings({ seed: e.target.value === "" ? undefined : Math.trunc(Number(e.target.value)) })
+            }
+            placeholder="Seed"
+            className="w-16 bg-transparent text-xs outline-none placeholder:text-muted [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
       )}

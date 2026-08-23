@@ -731,7 +731,10 @@ export function PromptComposer({
     <button
       onClick={handleSubmit}
       disabled={isSubmitting || !model}
-      className="flex h-16 shrink-0 items-center justify-center gap-1.5 self-center rounded-2xl bg-accent px-6 text-sm font-bold text-white disabled:opacity-40 hover:brightness-95 transition-[filter]"
+      // h-12/px-4 below sm: the full h-16 desktop button ate a third of the
+      // narrow fixed bottom bar's width and made the settings row wrap far
+      // more often than it needed to.
+      className="flex h-12 sm:h-16 shrink-0 items-center justify-center gap-1.5 self-center rounded-2xl bg-accent px-4 sm:px-6 text-sm font-bold text-white disabled:opacity-40 hover:brightness-95 transition-[filter]"
     >
       {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <GenerateIcon className="h-4 w-4" />}
       {isSubmitting ? "Generating…" : "Generate"}
@@ -954,19 +957,29 @@ export function PromptComposer({
           {promptEditorButton}
         </div>
 
-        <div className="flex items-center justify-between gap-2 pt-2 pl-10">
-          <div className="flex items-center gap-2 flex-wrap">
+        {/* flex-wrap on the OUTER row too (not just the pills group): on a
+            narrow screen the pills group's min-content width (its widest
+            single pill — .control-pill is white-space:nowrap) can exceed the
+            space left beside the fixed-size Generate button, and with a
+            non-wrapping outer row the pills simply overflowed underneath the
+            button (the reported "quality selector hides behind Generate"
+            bug). Letting the button drop to its own right-aligned line keeps
+            every control visible instead. pl-10 (the decorative alignment
+            under the attach button) is also dropped on mobile — it wasted
+            40px of a ~360px-wide bar. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 sm:pl-10">
+          <div className="flex min-w-0 items-center gap-2 flex-wrap">
             {model && <ModelSelector models={models} selectedId={model.id} onSelect={setModelId} />}
             {model && <SettingsBar model={model} schema={schema} />}
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="ml-auto flex items-center gap-2.5 shrink-0">
             <span className="hidden sm:inline">{costLine}</span>
             {generateButton}
           </div>
         </div>
 
-        {error && <div className="pt-1.5 pl-10 text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
+        {error && <div className="pt-1.5 sm:pl-10 text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
         {promptEditorModal}
         {referencePickerModal}
     </div>

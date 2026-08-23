@@ -38,6 +38,17 @@ export interface ComposerSettings {
   lyrics?: string;
   /** Skip vocals entirely (music-only). */
   instrumental?: boolean;
+  // ── Generic live-schema extras ────────────────────────────────────────
+  /** Negative prompt — only sent when the live schema exposes a matching field (negative_prompt/negative_tags). */
+  negativePrompt?: string;
+  /**
+   * Whitelisted extra params keyed by the REAL muapi field name (e.g.
+   * `high_bitrate: true`, `quality: "high"`, `stylize: 250`) — see
+   * src/lib/extra-params.ts. SettingsBar populates only fields the current
+   * model's live schema exposes and prunes stale keys on model switch;
+   * generate.ts re-validates each against the whitelist + live schema.
+   */
+  extraParams?: Record<string, string | number | boolean>;
 }
 
 /**

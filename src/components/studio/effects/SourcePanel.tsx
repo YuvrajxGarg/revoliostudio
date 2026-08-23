@@ -49,7 +49,7 @@ export function SourcePanel({
   const visibleEffects = activeCategory === "all" ? EFFECTS : EFFECTS.filter((e) => e.category === activeCategory);
 
   return (
-    <div className="flex h-full w-[260px] shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-border-subtle bg-surface p-3">
+    <div className="flex w-full lg:h-full lg:w-[260px] shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-border-subtle bg-surface p-3">
       <div className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-surface-2/60 p-2.5">
         <div className="min-w-0">
           <div className="panel-label">Source</div>
@@ -98,7 +98,10 @@ export function SourcePanel({
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start">
+      {/* In the stacked mobile layout the panel has no fixed height for
+          flex-1 to fill, so cap the effects grid at 40vh with its own
+          scrollbar instead of letting ~30 tiles push the preview offscreen. */}
+      <div className="flex-1 max-h-[40vh] lg:max-h-none overflow-y-auto grid grid-cols-2 gap-2 content-start">
         <button
           onClick={() => onSelectEffect(null)}
           className={cn(

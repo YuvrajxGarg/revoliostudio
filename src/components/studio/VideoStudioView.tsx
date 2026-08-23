@@ -247,7 +247,10 @@ export function VideoStudioView() {
       </div>
 
       {/* Fallback composer for narrow screens where the sidebar is hidden. */}
-      <div className="lg:hidden fixed inset-x-0 bottom-0 shrink-0 border-t border-border-subtle bg-background/95 backdrop-blur px-4 py-3 z-10">
+      {/* max-h + overflow keeps a tall composer from covering the whole
+          phone screen — safe now that Dropdown menus portal to <body>
+          instead of being clipped by this scroll container. */}
+      <div className="lg:hidden fixed inset-x-0 bottom-0 shrink-0 max-h-[70vh] overflow-y-auto border-t border-border-subtle bg-background/95 backdrop-blur px-4 py-3 z-10">
         <div className="mx-auto max-w-3xl">
           <PromptComposer category="video" variant="bottom" onGenerated={refetchLatest} />
         </div>

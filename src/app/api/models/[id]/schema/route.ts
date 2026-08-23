@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getModel } from "@/lib/models";
 import { getModelSchema, MuapiError } from "@/lib/muapi";
 import type { ModelSchemaInfo } from "@/lib/model-schema-types";
+import {
+  EXTRA_BOOLEAN_FIELDS,
+  EXTRA_ENUM_FIELDS,
+  EXTRA_NUMBER_FIELDS,
+  NEGATIVE_PROMPT_CANDIDATES,
+} from "@/lib/extra-params";
 
 export const runtime = "nodejs";
 
@@ -41,6 +47,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     lyricsField: null,
     instrumentalField: null,
     videoReferenceField: null,
+    aspectRatios: null,
+    defaultAspectRatio: null,
+    sizeFromAspectRatio: false,
+    durationOptions: null,
+    defaultDuration: null,
+    hasDurationField: false,
+    hasAspectRatioField: false,
+    seedField: false,
+    negativePromptField: null,
+    extraBooleans: [],
+    extraEnums: [],
+    extraNumbers: [],
   };
 
   // Candidate field names to check against the live schema, in priority
@@ -61,7 +79,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     "count",
     "max_images",
   ];
-  const AUDIO_CANDIDATES = ["generate_audio", "with_audio", "enable_audio", "audio"];
+  // "generate_audio_switch" is Pixverse v6's name for the same toggle —
+  // found in the 2026-08 live-schema audit (kept in sync with generate.ts).
+  const AUDIO_CANDIDATES = ["generate_audio", "with_audio", "enable_audio", "audio", "generate_audio_switch"];
   // "resolution"/"quality" alone missed several real video-model schemas
   // that expose the same concept under a different key (e.g. Seedance-style
   // "output_resolution", some providers' "video_quality"/"size") — widen
@@ -119,6 +139,53 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         ? null
         : (VIDEO_REF_CANDIDATES.find((key) => props[key]) ?? null);
 
+    // ── Live-schema aspect ratio / duration (see ModelSchemaInfo docs) ──
+    const arField = props.aspect_ratio;
+    const hasAspectRatioField = !!arField;
+    const liveAspectRatios = Array.isArray(arField?.enum) && arField.enum.length > 0 ? arField.enum : null;
+    // width/height-sized models get a synthetic ratio list; generate.ts
+    // converts the pick to real width/height within the schema's bounds.
+    const sizeFromAspectRatio = !hasAspectRatioField && !!props.width && !!props.height;
+    const durationEnum =
+      Array.isArray(durationField?.enum) && durationField.enum.length > 0
+        ? durationField.enum.map(Number).filter((n) => Number.isFinite(n))
+        : null;
+
+    // ── Generic whitelisted extras (see src/lib/extra-params.ts) ──
+    const extraBooleans = EXTRA_BOOLEAN_FIELDS.filter((d) => props[d.field]?.type === "boolean").map((d) => ({
+      field: d.field,
+      label: d.label,
+      default: (props[d.field]?.default as boolean) ?? false,
+    }));
+    const extraEnums = EXTRA_ENUM_FIELDS.filter(
+      (d) =>
+        d.field !== resolutionFieldName && // resolution picker already owns it (e.g. Seedream 4.5's "quality")
+        Array.isArray(props[d.field]?.enum) &&
+        props[d.field]!.enum!.length > 0
+    ).map((d) => ({
+      field: d.field,
+      label: d.label,
+      values: props[d.field]!.enum!,
+      default: (props[d.field]?.default as string) ?? props[d.field]!.enum![0],
+    }));
+    const extraNumbers = EXTRA_NUMBER_FIELDS.filter(
+      (d) => props[d.field]?.minValue != null && props[d.field]?.maxValue != null
+    ).map((d) => {
+      const p = props[d.field]!;
+      const min = p.minValue as number;
+      const max = p.maxValue as number;
+      return {
+        field: d.field,
+        label: d.label,
+        min,
+        max,
+        // Fractional ranges (z-image strength 0..1) get a fine step.
+        step: (p.step as number) ?? (max - min <= 3 ? 0.05 : 1),
+        default: (p.default as number) ?? min,
+      };
+    });
+    const negativePromptFieldName = NEGATIVE_PROMPT_CANDIDATES.find((key) => props[key]) ?? null;
+
     const info: ModelSchemaInfo = {
       resolutions: resolutionField?.enum ?? null,
       defaultResolution: (resolutionField?.default as string) ?? resolutionField?.enum?.[0] ?? null,
@@ -145,6 +212,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       lyricsField: lyricsFieldName,
       instrumentalField: instrumentalFieldName,
       videoReferenceField: videoReferenceFieldName,
+      aspectRatios: sizeFromAspectRatio
+        ? ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]
+        : liveAspectRatios,
+      defaultAspectRatio: sizeFromAspectRatio
+        ? "1:1"
+        : ((arField?.default as string) ?? liveAspectRatios?.[0] ?? null),
+      sizeFromAspectRatio,
+      durationOptions: durationEnum,
+      defaultDuration:
+        typeof durationField?.default === "number" ? durationField.default : (durationEnum?.[0] ?? null),
+      hasDurationField: !!durationField,
+      hasAspectRatioField,
+      seedField: !!props.seed,
+      negativePromptField: negativePromptFieldName,
+      extraBooleans,
+      extraEnums,
+      extraNumbers,
     };
 
     cache.set(model.endpoint, { info, at: Date.now() });

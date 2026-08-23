@@ -1,3 +1,24 @@
+/** One live-schema "extra" parameter surfaced generically in SettingsBar — see src/lib/extra-params.ts for the whitelist and the end-to-end flow. */
+export interface ExtraBooleanParam {
+  field: string;
+  label: string;
+  default: boolean;
+}
+export interface ExtraEnumParam {
+  field: string;
+  label: string;
+  values: string[];
+  default: string;
+}
+export interface ExtraNumberParam {
+  field: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+}
+
 export interface ModelSchemaInfo {
   resolutions: string[] | null;
   defaultResolution: string | null;
@@ -30,5 +51,39 @@ export interface ModelSchemaInfo {
    * slot should be shown alongside its image reference tray.
    */
   videoReferenceField: string | null;
+  // ── Live-schema ground truth for controls the registry used to hardcode ──
+  /**
+   * Aspect-ratio enum straight from the live schema. A 2026-08 audit found
+   * 72 models where the registry's static list is narrower than what the
+   * API accepts, and 33 "ghost" models where the registry renders an AR
+   * dropdown the schema doesn't even have — so when the live schema loads,
+   * it wins over the registry both ways. `null` + no error = the schema has
+   * no aspect_ratio field (hide the control), unless `sizeFromAspectRatio`.
+   */
+  aspectRatios: string[] | null;
+  defaultAspectRatio: string | null;
+  /**
+   * True for models (flux-dev, hidream, hunyuan-image, z-image-turbo, …)
+   * whose schema sizes output via `width`/`height` ints instead of an
+   * aspect_ratio enum. The UI shows a synthetic ratio list and generate.ts
+   * converts the chosen ratio to width/height within the schema's bounds —
+   * previously these models' AR dropdown (when present) was a no-op.
+   */
+  sizeFromAspectRatio: boolean;
+  /** Discrete duration enum from the live schema (e.g. Sora 2's 4/8/12/16/20s) — preferred over the registry's static list. Distinct from `duration`, the min/max slider shape. */
+  durationOptions: number[] | null;
+  defaultDuration: number | null;
+  /** True when the live schema has a `duration` field in ANY shape (slider, enum, or plain int). When the schema loaded fine and this is false, the duration control is hidden and generate.ts omits the field. */
+  hasDurationField: boolean;
+  /** True when the live schema has an `aspect_ratio` field (regardless of enum shape). */
+  hasAspectRatioField: boolean;
+  // ── Generic whitelisted extras (see src/lib/extra-params.ts) ─────────────
+  /** Live schema has a `seed` field — surfaces the optional Seed input. */
+  seedField: boolean;
+  /** Real field name for a negative prompt (`negative_prompt`/`negative_tags`), if any. */
+  negativePromptField: string | null;
+  extraBooleans: ExtraBooleanParam[];
+  extraEnums: ExtraEnumParam[];
+  extraNumbers: ExtraNumberParam[];
   error?: string;
 }

@@ -5,6 +5,12 @@ import { getModel, type Category, type ModelConfig } from "@/lib/models";
 import { submitJob, extractOutputUrls, getModelSchema, MuapiError } from "@/lib/muapi";
 import { removeBackgroundPhotoroom, PhotoroomError } from "@/lib/photoroom";
 import { estimateCostUSD } from "@/lib/pricing";
+import {
+  EXTRA_BOOLEAN_FIELDS,
+  EXTRA_ENUM_FIELDS,
+  EXTRA_NUMBER_FIELDS,
+  NEGATIVE_PROMPT_CANDIDATES,
+} from "@/lib/extra-params";
 
 // Candidate live-schema field names for "how many outputs" and "generate
 // audio" — muapi doesn't standardize these across model providers, so we
@@ -25,7 +31,8 @@ const NUM_IMAGES_CANDIDATES = [
   "count",
   "max_images",
 ];
-const AUDIO_CANDIDATES = ["generate_audio", "with_audio", "enable_audio", "audio"];
+// "generate_audio_switch" is Pixverse v6's name for the same toggle (2026-08 audit).
+const AUDIO_CANDIDATES = ["generate_audio", "with_audio", "enable_audio", "audio", "generate_audio_switch"];
 // Kept in sync with src/app/api/models/[id]/schema/route.ts's
 // STYLE_CANDIDATES / LYRICS_CANDIDATES / INSTRUMENTAL_CANDIDATES — Suno's
 // and MMAudio's real field names weren't available to verify directly (see
@@ -134,6 +141,11 @@ interface GenerateBody {
     instrumental?: boolean;
     // ── Motion mode extras (Wan Animate's animate/replace toggle) ────────
     motionMode?: string;
+    // ── Generic live-schema extras (see src/lib/extra-params.ts) ─────────
+    /** Only sent when the live schema exposes negative_prompt/negative_tags. */
+    negativePrompt?: string;
+    /** Whitelisted extra params keyed by the REAL muapi field name — re-validated against the whitelist AND the live schema below before anything is forwarded. */
+    extraParams?: Record<string, string | number | boolean>;
   };
 }
 
@@ -141,15 +153,11 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   const payload: Record<string, unknown> = { prompt: body.prompt || "" };
   const settings = body.settings ?? {};
 
-  if (model.aspectRatios?.length) {
-    payload.aspect_ratio = settings.aspectRatio || model.defaultAspectRatio;
-  }
-  if (model.durations?.length || settings.duration) {
-    payload.duration = settings.duration || model.defaultDuration;
-  }
-  if (settings.seed) {
-    payload.seed = settings.seed;
-  }
+  // aspect_ratio / duration / seed are validated against the live schema
+  // further down (after the probe) — a 2026-08 audit found 33 models where
+  // the registry sends aspect_ratio the schema doesn't have (ignored or
+  // rejected server-side), 7 with a ghost duration, and 11 that size via
+  // width/height instead of aspect_ratio.
 
   // OpenAI's gpt-image models support a native `background: "transparent"`
   // param for a real alpha-channel PNG — muapi's own gpt-image-2 schema
@@ -167,7 +175,11 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   // didn't match what the registry had (verified against live schemas).
   // Probe the schema once up front and reuse it below rather than trusting
   // the static numbers blindly.
-  let liveProps: Record<string, { maxItems?: number; type?: string; enum?: string[] }> | null = null;
+  type LiveProps = Record<
+    string,
+    { maxItems?: number; type?: string; enum?: string[]; minValue?: number; maxValue?: number; default?: unknown }
+  >;
+  let liveProps: LiveProps | null = null;
   // Only relevant outside the dedicated v2v/motion/enhance composers — those
   // already have their own required primary video field, handled in their
   // own branches below, and never read VIDEO_REF_CANDIDATES.
@@ -180,18 +192,115 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
     !!settings.resolution ||
     model.mode === "t2a" ||
     wantsOptionalVideoRef ||
-    !!body.maskUrl;
+    !!body.maskUrl ||
+    // The ghost-field fixes and the generic extras below all need the live
+    // schema — in practice this makes the probe near-universal, which is
+    // fine: submits are heavyweight anyway and the probe result decides
+    // real field names.
+    !!model.aspectRatios?.length ||
+    !!model.durations?.length ||
+    !!settings.duration ||
+    !!settings.negativePrompt?.trim() ||
+    (settings.extraParams != null && Object.keys(settings.extraParams).length > 0);
   if (needsSchema) {
     try {
       const schema = await getModelSchema(model.endpoint);
-      liveProps = (schema.input_schema?.schemas?.input_data?.properties ?? {}) as Record<
-        string,
-        { maxItems?: number; type?: string; enum?: string[] }
-      >;
+      liveProps = (schema.input_schema?.schemas?.input_data?.properties ?? {}) as LiveProps;
     } catch {
       // Schema probe failed — fall back to the static registry/omitting
       // fields rather than guessing a name that might not exist.
       liveProps = null;
+    }
+  }
+
+  // ── aspect_ratio / duration / seed, validated against the live schema ──
+  // With the schema in hand: only send fields it actually has, and prefer
+  // its enum when the stored value isn't in it. Probe failed → registry
+  // behavior, exactly as before.
+  if (liveProps) {
+    const arField = liveProps.aspect_ratio;
+    if (arField) {
+      const wanted = settings.aspectRatio || model.defaultAspectRatio;
+      const valid =
+        wanted && (!Array.isArray(arField.enum) || arField.enum.length === 0 || arField.enum.includes(wanted));
+      const fallback = (arField.default as string) ?? arField.enum?.[0];
+      if (valid) payload.aspect_ratio = wanted;
+      else if (fallback) payload.aspect_ratio = fallback;
+    } else if (liveProps.width && liveProps.height && settings.aspectRatio) {
+      // Models sized via width/height ints (flux-dev, hidream, hunyuan-image,
+      // z-image-turbo, …): convert the chosen ratio to concrete dimensions at
+      // roughly the schema's default pixel budget, snapped to multiples of 16
+      // and clamped to its bounds. Previously these models either showed no
+      // size control at all or sent a ghost aspect_ratio the API ignored.
+      const [rw, rh] = settings.aspectRatio.split(":").map(Number);
+      if (rw > 0 && rh > 0) {
+        const base = (liveProps.width.default as number) ?? 1024;
+        const min = liveProps.width.minValue ?? 256;
+        const max = liveProps.width.maxValue ?? 2048;
+        const snap = (v: number) => Math.min(max, Math.max(min, Math.round(v / 16) * 16));
+        const ratio = rw / rh;
+        payload.width = snap(base * Math.sqrt(ratio));
+        payload.height = snap(base / Math.sqrt(ratio));
+      }
+    }
+
+    if (liveProps.duration) {
+      const wanted = settings.duration || model.defaultDuration;
+      if (wanted != null) {
+        const durEnum = Array.isArray(liveProps.duration.enum) ? liveProps.duration.enum.map(Number) : null;
+        payload.duration =
+          durEnum && durEnum.length > 0 && !durEnum.includes(wanted)
+            ? ((liveProps.duration.default as number) ?? durEnum[0])
+            : wanted;
+      }
+    }
+
+    if (settings.seed != null && liveProps.seed) {
+      payload.seed = settings.seed;
+    }
+
+    if (settings.negativePrompt?.trim()) {
+      const negFieldName = NEGATIVE_PROMPT_CANDIDATES.find((key) => liveProps![key]);
+      if (negFieldName) payload[negFieldName] = settings.negativePrompt.trim();
+    }
+
+    // ── Generic whitelisted extras (see src/lib/extra-params.ts) ──
+    // Every key must be (a) whitelisted, (b) present in the live schema,
+    // and (c) type/enum/range-valid — anything else is dropped, so a stale
+    // or hand-crafted extraParams entry can't inject arbitrary fields.
+    if (settings.extraParams) {
+      const resolutionFieldTaken = settings.resolution
+        ? RESOLUTION_CANDIDATES.find((key) => Array.isArray(liveProps![key]?.enum))
+        : null;
+      for (const [key, value] of Object.entries(settings.extraParams)) {
+        const prop = liveProps[key];
+        if (!prop || key === resolutionFieldTaken) continue;
+        if (EXTRA_BOOLEAN_FIELDS.some((d) => d.field === key)) {
+          if (typeof value === "boolean" && prop.type === "boolean") payload[key] = value;
+        } else if (EXTRA_ENUM_FIELDS.some((d) => d.field === key)) {
+          if (Array.isArray(prop.enum) && prop.enum.includes(String(value))) payload[key] = String(value);
+        } else if (EXTRA_NUMBER_FIELDS.some((d) => d.field === key)) {
+          const n = Number(value);
+          if (
+            Number.isFinite(n) &&
+            (prop.minValue == null || n >= prop.minValue) &&
+            (prop.maxValue == null || n <= prop.maxValue)
+          ) {
+            payload[key] = n;
+          }
+        }
+      }
+    }
+  } else {
+    // No live schema — legacy static behavior.
+    if (model.aspectRatios?.length) {
+      payload.aspect_ratio = settings.aspectRatio || model.defaultAspectRatio;
+    }
+    if (model.durations?.length || settings.duration) {
+      payload.duration = settings.duration || model.defaultDuration;
+    }
+    if (settings.seed) {
+      payload.seed = settings.seed;
     }
   }
 
@@ -262,6 +371,13 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   if (model.mode === "enhance" && model.requiresVideoInput) {
     if (body.videoUrl) payload.video_url = body.videoUrl;
     if (typeof settings.keepOriginalSound === "boolean") payload.copy_audio = settings.keepOriginalSound;
+    // Topaz video upscale takes a discrete 1/2/4x factor — this used to be
+    // gated on model.id === "topaz-image-upscale" AFTER this early return,
+    // so the video upscaler showed a 2x/4x picker whose choice was silently
+    // never sent (2026-08 audit).
+    if (settings.upscaleFactor && (!liveProps || liveProps.upscale_factor)) {
+      payload.upscale_factor = settings.upscaleFactor;
+    }
     delete payload.prompt;
     return payload;
   }
@@ -294,12 +410,17 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   // generic "add as many refs" tray. Two shapes exist on muapi's side:
   // images_list = [start, end] (most models), or a separate named field for
   // the end frame alongside a single image_url for the start.
-  if (model.mode === "flf" || (model.supportsStartEndFrame && model.imageInputKey === "images_list")) {
-    const frames = [body.startFrameUrl, body.endFrameUrl].filter(Boolean);
-    payload.images_list = frames;
-  } else if (model.supportsStartEndFrame && model.endFrameFieldName) {
+  // endFrameFieldName takes precedence over the flf images_list shape: some
+  // dedicated first/last-frame models (vidu-q3-flf, pixverse-v6-transition)
+  // actually take image_url + last_image, not images_list — the 2026-08
+  // audit caught vidu-q3-flf's frames being sent under an images_list field
+  // its schema doesn't even have.
+  if (model.supportsStartEndFrame && model.endFrameFieldName) {
     if (body.startFrameUrl) payload.image_url = body.startFrameUrl;
     if (body.endFrameUrl) payload[model.endFrameFieldName] = body.endFrameUrl;
+  } else if (model.mode === "flf" || (model.supportsStartEndFrame && model.imageInputKey === "images_list")) {
+    const frames = [body.startFrameUrl, body.endFrameUrl].filter(Boolean);
+    payload.images_list = frames;
   } else if (model.imageInputKey === "images_list") {
     payload.images_list = (body.references ?? []).slice(0, referenceCap);
   } else if (model.imageInputKey === "image_url") {

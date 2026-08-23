@@ -390,9 +390,12 @@ export function GenerationDetailPanel({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] bg-black/90 flex" onClick={onClose}>
+    // Stacks vertically below md: the fixed 360px info rail beside a flex-1
+    // media pane left ~30px of media on a phone. Media on top, rail as a
+    // half-height bottom sheet with its own scroll.
+    <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col md:flex-row" onClick={onClose}>
       <div
-        className="flex-1 flex flex-col items-center justify-center gap-3 p-6 min-w-0"
+        className="flex-1 flex flex-col items-center justify-center gap-3 p-4 md:p-6 min-w-0 min-h-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-1 min-h-0 flex items-center justify-center w-full">
@@ -416,7 +419,10 @@ export function GenerationDetailPanel({
               src={media}
               camera-controls
               auto-rotate
-              style={{ width: "70vw", height: "80vh", background: "var(--surface)", borderRadius: "0.75rem" }}
+              // Fills the media pane (which is 100vh beside the rail on
+              // desktop, ~55vh above it on mobile) instead of a hardcoded
+              // 70vw/80vh that overflowed the stacked mobile layout.
+              style={{ width: "100%", height: "100%", background: "var(--surface)", borderRadius: "0.75rem" }}
             />
           </>
         ) : isAudio && media ? (
@@ -464,7 +470,7 @@ export function GenerationDetailPanel({
       </div>
 
       <div
-        className="w-[360px] shrink-0 h-full bg-surface border-l border-border-subtle flex flex-col"
+        className="w-full md:w-[360px] shrink-0 h-[45vh] md:h-full bg-surface border-t md:border-t-0 md:border-l border-border-subtle flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">

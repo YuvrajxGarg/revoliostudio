@@ -114,7 +114,7 @@ export function EffectControls({
   onInteractStart: () => void;
 }) {
   return (
-    <div className="flex h-full w-[280px] shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-border-subtle bg-surface p-3">
+    <div className="flex w-full lg:h-full lg:w-[280px] shrink-0 flex-col gap-4 overflow-y-auto rounded-2xl border border-border-subtle bg-surface p-3">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{effect ? effect.name : "Original"}</div>
