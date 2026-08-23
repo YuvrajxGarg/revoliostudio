@@ -231,7 +231,7 @@ export function ToolStudioView({ toolId }: { toolId: string }) {
           title dropped from this header (now redundant with the banner
           above) — just the search/filter/grid-size controls remain. */}
       <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
-        <div className="flex items-center justify-end gap-2 px-5 md:px-6 py-3.5 border-b border-border-subtle/60 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-5 md:px-6 py-3.5 border-b border-border-subtle/60 shrink-0">
           <GalleryToolbar search={search} onSearch={setSearch} filters={filters} onFilters={setFilters} showTool={false} />
           {items.length > 0 && <GridSizeSlider value={colWidth} onChange={setColWidth} />}
         </div>

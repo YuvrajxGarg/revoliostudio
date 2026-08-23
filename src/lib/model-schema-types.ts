@@ -77,6 +77,22 @@ export interface ModelSchemaInfo {
   hasDurationField: boolean;
   /** True when the live schema has an `aspect_ratio` field (regardless of enum shape). */
   hasAspectRatioField: boolean;
+  /**
+   * Multi-video reference ARRAY on this model, if any (Seedance 2.5 Omni's
+   * `videos_list`, 2.0 Omni's `video_files`, wan2.7-ref's `videos_list`) —
+   * surfaces a multi-clip upload row next to the image reference tray.
+   * Distinct from `videoReferenceField` (a single optional video string) and
+   * from a v2v model's own primary video input (the model's declared
+   * `videoFieldName` is never matched here).
+   */
+  videoListField: { field: string; max: number } | null;
+  /**
+   * Audio-reference input on this model, if any — a single URL string
+   * (wan2.7 t2v/i2v's `audio_url`) or an array (Seedance Omni/Video Edit's
+   * `audios_list`/`audio_files`). Unrelated to `audioField`, the boolean
+   * generate-audio toggle.
+   */
+  audioRefField: { field: string; isArray: boolean; max: number } | null;
   // ── Generic whitelisted extras (see src/lib/extra-params.ts) ─────────────
   /** Live schema has a `seed` field — surfaces the optional Seed input. */
   seedField: boolean;

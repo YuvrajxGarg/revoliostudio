@@ -8,6 +8,8 @@ import {
   EXTRA_ENUM_FIELDS,
   EXTRA_NUMBER_FIELDS,
   NEGATIVE_PROMPT_CANDIDATES,
+  VIDEO_LIST_CANDIDATES,
+  AUDIO_REF_CANDIDATES,
 } from "@/lib/extra-params";
 
 export const runtime = "nodejs";
@@ -54,6 +56,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     defaultDuration: null,
     hasDurationField: false,
     hasAspectRatioField: false,
+    videoListField: null,
+    audioRefField: null,
     seedField: false,
     negativePromptField: null,
     extraBooleans: [],
@@ -179,12 +183,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         label: d.label,
         min,
         max,
-        // Fractional ranges (z-image strength 0..1) get a fine step.
-        step: (p.step as number) ?? (max - min <= 3 ? 0.05 : 1),
+        // Fractional ranges (z-image strength 0..1) get a fine step; huge
+        // ones (Tripo's face_limit 1000..2000000) a coarse one so the
+        // slider doesn't crawl.
+        step: (p.step as number) ?? (max - min <= 3 ? 0.05 : max - min >= 100000 ? 1000 : 1),
         default: (p.default as number) ?? min,
       };
     });
     const negativePromptFieldName = NEGATIVE_PROMPT_CANDIDATES.find((key) => props[key]) ?? null;
+
+    // ── Video / audio reference inputs (see the candidate-list docs in
+    // src/lib/extra-params.ts). A v2v model's own primary video field is
+    // excluded so e.g. Seedance Video Edit's `video_urls` can't double up as
+    // a "reference" row on top of the dedicated upload zone it already has.
+    const videoListFieldName =
+      VIDEO_LIST_CANDIDATES.find((key) => key !== model.videoFieldName && props[key]) ?? null;
+    const audioRefFieldName = AUDIO_REF_CANDIDATES.find((key) => props[key]) ?? null;
 
     const info: ModelSchemaInfo = {
       resolutions: resolutionField?.enum ?? null,
@@ -224,6 +238,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         typeof durationField?.default === "number" ? durationField.default : (durationEnum?.[0] ?? null),
       hasDurationField: !!durationField,
       hasAspectRatioField,
+      videoListField: videoListFieldName
+        ? { field: videoListFieldName, max: (props[videoListFieldName]?.maxItems as number) ?? 3 }
+        : null,
+      audioRefField: audioRefFieldName
+        ? {
+            field: audioRefFieldName,
+            isArray: audioRefFieldName !== "audio_url",
+            max: audioRefFieldName === "audio_url" ? 1 : ((props[audioRefFieldName]?.maxItems as number) ?? 3),
+          }
+        : null,
       seedField: !!props.seed,
       negativePromptField: negativePromptFieldName,
       extraBooleans,

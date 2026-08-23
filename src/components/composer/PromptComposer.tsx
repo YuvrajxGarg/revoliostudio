@@ -9,6 +9,7 @@ import { GenerateIcon } from "@/components/ui/GenerateIcon";
 import { ModelSelector } from "./ModelSelector";
 import { ReferenceTray, type ReferenceQuickPick } from "./ReferenceTray";
 import { FrameSlots } from "./FrameSlots";
+import { MediaReferenceList } from "./MediaReferenceList";
 import { SettingsBar } from "./SettingsBar";
 import { MentionPopover, type MentionItem } from "./MentionPopover";
 import { MentionHighlightTextarea } from "./MentionHighlightTextarea";
@@ -18,7 +19,7 @@ import type { RefCategory } from "@/hooks/useCuratedReferences";
 import { estimateCostUSD, formatCostUSD, formatCostINR } from "@/lib/pricing";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
-import type { ModelSchemaInfo } from "@/lib/model-schema-types";
+import { useModelSchema } from "@/hooks/useModelSchema";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 
@@ -341,6 +342,8 @@ export function PromptComposer({
     startFrame,
     endFrame,
     videoReference,
+    videoReferences,
+    audioReferences,
     settings,
     isSubmitting,
     hasHydrated,
@@ -350,6 +353,10 @@ export function PromptComposer({
     setPrompt,
     addReference,
     setVideoReference,
+    addVideoReference,
+    removeVideoReference,
+    addAudioReference,
+    removeAudioReference,
     setSubmitting,
     setActivePreset,
     resetAfterSubmit,
@@ -362,9 +369,9 @@ export function PromptComposer({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
-  const [schema, setSchema] = useState<ModelSchemaInfo | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [videoRefUploading, setVideoRefUploading] = useState(false);
+  const [mediaRefUploading, setMediaRefUploading] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [referencePickerCategory, setReferencePickerCategory] = useState<RefCategory | null>(null);
 
@@ -394,6 +401,23 @@ export function PromptComposer({
       setError(err instanceof Error ? err.message : "Failed to upload video — check your connection and try again");
     } finally {
       setVideoRefUploading(false);
+    }
+  }
+
+  // Multi-slot video/audio references (videoListField / audioRefField on the
+  // live schema — e.g. Seedance Omni's videos_list + audios_list, wan2.7's
+  // audio_url). Distinct from the single videoReference slot above.
+  async function handleMediaRefUpload(file: File, kind: "video" | "audio", max: number) {
+    setMediaRefUploading(true);
+    setError(null);
+    try {
+      const { url, name } = await uploadReferenceFile(file);
+      if (kind === "video") addVideoReference(url, name, max);
+      else addAudioReference(url, name, max);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to upload ${kind} — check your connection and try again`);
+    } finally {
+      setMediaRefUploading(false);
     }
   }
 
@@ -428,30 +452,48 @@ export function PromptComposer({
   const model: ModelConfig | undefined = hasHydrated ? models.find((m) => m.id === modelId) ?? models[0] : undefined;
   const estimatedCostUSD = model ? estimateCostUSD(model, settings) : 0;
 
-  // Fetched once here (rather than inside SettingsBar) so both the settings
-  // row AND the reference-image cap below can use the model's real live
-  // schema — the static registry's maxReferences can drift or be wrong
-  // (several video models' true multi-image limits didn't match it).
-  useEffect(() => {
-    setSchema(null);
-    if (!model) return;
-    let cancelled = false;
-    fetch(`/api/models/${model.id}/schema`)
-      .then((r) => r.json())
-      .then((data: ModelSchemaInfo) => {
-        if (!cancelled) setSchema(data);
-      })
-      .catch(() => {
-        if (!cancelled) setSchema(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [model]);
+  // Fetched once here (rather than inside SettingsBar) so the settings row,
+  // the reference-image cap, and the media reference slots below all share
+  // the model's real live schema — the static registry's maxReferences can
+  // drift or be wrong (several video models' true multi-image limits didn't
+  // match it).
+  const schema = useModelSchema(model?.id);
 
   // Real max reference-image count from the live schema when it's loaded;
   // falls back to the static registry value otherwise (or while loading).
   const maxRefs = schema?.maxReferenceImages ?? model?.maxReferences ?? 0;
+
+  // Multi-video / audio reference inputs, purely schema-discovered (no
+  // registry involvement) — see videoListField/audioRefField on
+  // ModelSchemaInfo. Only trusted from a successful probe.
+  const videoListField = schema && !schema.error ? schema.videoListField : null;
+  const audioRefField = schema && !schema.error ? schema.audioRefField : null;
+  const mediaRefSlots = (
+    <>
+      {videoListField && (
+        <MediaReferenceList
+          kind="video"
+          label="Video references (optional)"
+          items={videoReferences}
+          max={videoListField.max}
+          uploading={mediaRefUploading}
+          onUpload={(f) => handleMediaRefUpload(f, "video", videoListField.max)}
+          onRemove={removeVideoReference}
+        />
+      )}
+      {audioRefField && (
+        <MediaReferenceList
+          kind="audio"
+          label={audioRefField.isArray ? "Audio references (optional)" : "Audio reference (optional)"}
+          items={audioReferences}
+          max={audioRefField.max}
+          uploading={mediaRefUploading}
+          onUpload={(f) => handleMediaRefUpload(f, "audio", audioRefField.max)}
+          onRemove={removeAudioReference}
+        />
+      )}
+    </>
+  );
 
   // Style/Character/Location/Element picks add another reference image —
   // the exact same `references` array a plain upload goes into, so nothing
@@ -615,6 +657,8 @@ export function PromptComposer({
           startFrameUrl: startFrame?.url ?? null,
           endFrameUrl: endFrame?.url ?? null,
           videoUrl: videoReference?.url ?? null,
+          videoUrls: videoReferences.length ? videoReferences.map((r) => r.url) : undefined,
+          audioUrls: audioReferences.length ? audioReferences.map((r) => r.url) : undefined,
           settings,
           projectId,
           toolId: toolId ?? null,
@@ -793,6 +837,10 @@ export function PromptComposer({
                 onClear={() => setVideoReference(null)}
               />
             )}
+            {/* Multi-video / audio reference slots — deliberately outside
+                the frame-slots gate (wan2.7-i2v has start/end frames AND an
+                audio_url input). */}
+            {mediaRefSlots}
           </>
         )}
 
@@ -916,6 +964,8 @@ export function PromptComposer({
             />
           </div>
         )}
+
+        {(videoListField || audioRefField) && <div className="mb-2 flex flex-col gap-2">{mediaRefSlots}</div>}
 
         <div className="flex items-center gap-2">
           {attachButton}

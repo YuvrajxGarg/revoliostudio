@@ -1018,7 +1018,10 @@ export const MODELS: ModelConfig[] = [
     category: "image",
     mode: "t2i",
     endpoint: "midjourney-v7",
-    maxReferences: 0,
+    // Live schema takes an optional image_url alongside the prompt
+    // (2026-08 audit) — was wrongly registered as text-only.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
     supportsNumImages: true,
@@ -1033,7 +1036,9 @@ export const MODELS: ModelConfig[] = [
     category: "image",
     mode: "t2i",
     endpoint: "midjourney-v8",
-    maxReferences: 0,
+    // Optional image_url per the live schema (2026-08 audit), like v7.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
     supportsNumImages: true,
@@ -1239,7 +1244,10 @@ export const MODELS: ModelConfig[] = [
     category: "image",
     mode: "t2i",
     endpoint: "z-image-base",
-    maxReferences: 0,
+    // Live schema takes an optional image_url + a whitelisted `strength`
+    // slider for img2img (2026-08 audit) — was wrongly registered text-only.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
     supportsNumImages: true,
@@ -2594,8 +2602,13 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "kling-v3.0-pro-motion-control",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // All four Kling motion-control schemas take an optional single
+    // image_url (a character to drive with the clip's motion) plus a
+    // whitelisted character_orientation enum — no images_list at all
+    // (2026-08 audit). buildPayload's v2v branch schema-confirms which
+    // shape to send.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2609,8 +2622,9 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "kling-v3.0-std-motion-control",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // Optional single image_url — see the v3 Pro entry above.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2624,8 +2638,9 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "kling-v2.6-pro-motion-control",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // Optional single image_url — see the v3 Pro entry above.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2638,8 +2653,9 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "kling-v2.6-std-motion-control",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // Optional single image_url — see the v3 Pro entry above.
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2652,8 +2668,10 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "ai-dance-effects",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // Optional single image_url (the character to animate) per the live
+    // schema — no images_list (2026-08 audit).
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1"],
     defaultAspectRatio: "16:9",
@@ -2666,7 +2684,11 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "ai-video-face-swap",
-    imageInputKey: "images_list",
+    // The source face is a single image_url — the registry's old
+    // images_list shape meant the face image was submitted under a field
+    // the API doesn't even have (2026-08 audit). target_gender /
+    // target_index surface via the extra-params whitelist.
+    imageInputKey: "image_url",
     maxReferences: 1,
     requiresVideoInput: true,
     tagline: "Swap a face into an existing video with expression & lighting transfer",
@@ -2678,8 +2700,10 @@ export const MODELS: ModelConfig[] = [
     category: "video",
     mode: "v2v",
     endpoint: "luma-flash-reframe",
-    imageInputKey: "images_list",
-    maxReferences: 0,
+    // Optional single image_url to guide the outpainted regions per the
+    // live schema — no images_list (2026-08 audit).
+    imageInputKey: "image_url",
+    maxReferences: 1,
     requiresVideoInput: true,
     aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4"],
     defaultAspectRatio: "16:9",

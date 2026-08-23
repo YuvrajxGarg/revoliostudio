@@ -87,6 +87,15 @@ interface ComposerSlice {
    * composers, which already have their own primary video input.
    */
   videoReference: ReferenceImage | null;
+  /**
+   * Multi-video references for models whose live schema exposes a video
+   * ARRAY (Seedance Omni's videos_list/video_files, wan2.7-ref's
+   * videos_list — see `videoListField` on ModelSchemaInfo). Distinct from
+   * the single `videoReference` slot above.
+   */
+  videoReferences: ReferenceImage[];
+  /** Audio reference(s) for models whose live schema exposes an audio input — see `audioRefField` on ModelSchemaInfo. */
+  audioReferences: ReferenceImage[];
   settings: ComposerSettings;
   /** Currently selected preset/template, shown as a preview card — see `ActivePreset` above. */
   activePreset: ActivePreset | null;
@@ -100,6 +109,8 @@ function emptySlice(): ComposerSlice {
     startFrame: null,
     endFrame: null,
     videoReference: null,
+    videoReferences: [],
+    audioReferences: [],
     settings: { aspectRatio: "1:1", numImages: 1 },
     activePreset: null,
   };
@@ -143,6 +154,12 @@ interface ComposerState extends ComposerSlice {
   setStartFrame: (ref: ReferenceImage | null) => void;
   setEndFrame: (ref: ReferenceImage | null) => void;
   setVideoReference: (ref: ReferenceImage | null) => void;
+  /** Adds to the multi-video reference list — dedupes by url, no-ops at `max`. */
+  addVideoReference: (url: string, name: string, max: number) => void;
+  removeVideoReference: (id: string) => void;
+  /** Adds an audio reference — dedupes by url, no-ops at `max`. */
+  addAudioReference: (url: string, name: string, max: number) => void;
+  removeAudioReference: (id: string) => void;
   updateSettings: (partial: Partial<ComposerSettings>) => void;
   setActivePreset: (preset: ActivePreset | null) => void;
   setSubmitting: (v: boolean) => void;
@@ -162,12 +179,14 @@ export const useComposerStore = create<ComposerState>()(
       setCategory: (c) => {
         const state = get();
         if (state.category === c) return;
-        const { modelId, prompt, references, startFrame, endFrame, videoReference, settings, activePreset } = state;
+        const { modelId, prompt, references, startFrame, endFrame, videoReference, videoReferences, audioReferences, settings, activePreset } = state;
         const byCategory = {
           ...state._byCategory,
-          [state.category]: { modelId, prompt, references, startFrame, endFrame, videoReference, settings, activePreset },
+          [state.category]: { modelId, prompt, references, startFrame, endFrame, videoReference, videoReferences, audioReferences, settings, activePreset },
         };
-        const incoming = byCategory[c] ?? emptySlice();
+        // Spread over emptySlice so a slice persisted before a field existed
+        // (e.g. videoReferences) rehydrates as its empty default, not undefined.
+        const incoming = { ...emptySlice(), ...(byCategory[c] ?? {}) };
         set({ category: c, _byCategory: byCategory, ...incoming });
       },
       setProjectId: (id) => set({ projectId: id }),
@@ -201,6 +220,21 @@ export const useComposerStore = create<ComposerState>()(
       setEndFrame: (ref) => set({ endFrame: ref }),
       setVideoReference: (ref) => set({ videoReference: ref }),
 
+      addVideoReference: (url, name, max) => {
+        const current = get().videoReferences;
+        if (current.length >= max || current.some((r) => r.url === url)) return;
+        set({ videoReferences: [...current, { id: nanoid(8), url, name }] });
+      },
+      removeVideoReference: (id) =>
+        set({ videoReferences: get().videoReferences.filter((r) => r.id !== id) }),
+      addAudioReference: (url, name, max) => {
+        const current = get().audioReferences;
+        if (current.length >= max || current.some((r) => r.url === url)) return;
+        set({ audioReferences: [...current, { id: nanoid(8), url, name }] });
+      },
+      removeAudioReference: (id) =>
+        set({ audioReferences: get().audioReferences.filter((r) => r.id !== id) }),
+
       updateSettings: (partial) =>
         set({ settings: { ...get().settings, ...partial } }),
 
@@ -209,7 +243,7 @@ export const useComposerStore = create<ComposerState>()(
       setSubmitting: (v) => set({ isSubmitting: v }),
 
       resetAfterSubmit: () =>
-        set({ prompt: "", references: [], startFrame: null, endFrame: null, videoReference: null }),
+        set({ prompt: "", references: [], startFrame: null, endFrame: null, videoReference: null, videoReferences: [], audioReferences: [] }),
     }),
     {
       // Everything the user set up survives a refresh — prompt, model,
@@ -230,6 +264,8 @@ export const useComposerStore = create<ComposerState>()(
             startFrame: state.startFrame,
             endFrame: state.endFrame,
             videoReference: state.videoReference,
+            videoReferences: state.videoReferences,
+            audioReferences: state.audioReferences,
             settings: state.settings,
             activePreset: state.activePreset,
           },
@@ -249,7 +285,9 @@ export const useComposerStore = create<ComposerState>()(
             useComposerStore.setState({ hasHydrated: true });
             return;
           }
-          const slice = state._byCategory?.[state.category] ?? emptySlice();
+          // Spread over emptySlice so blobs persisted before a field existed
+          // (e.g. videoReferences) fill in their empty defaults.
+          const slice = { ...emptySlice(), ...(state._byCategory?.[state.category] ?? {}) };
           useComposerStore.setState({ ...slice, hasHydrated: true });
         } catch {
           // A corrupted/malformed persisted blob (or any other unexpected

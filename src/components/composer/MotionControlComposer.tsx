@@ -7,6 +7,8 @@ import { estimateCostUSD, formatCostUSD, formatCostINR } from "@/lib/pricing";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { AspectRatioIcon } from "@/components/ui/AspectRatioIcon";
 import { ModelSelector } from "./ModelSelector";
+import { ExtraParamControls } from "./ExtraParamControls";
+import { useModelSchema } from "@/hooks/useModelSchema";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
@@ -111,18 +113,27 @@ export function MotionControlComposer({ onGenerated }: { onGenerated?: () => voi
   // ModelConfig); Runway Act-Two has neither, so these just stay unset.
   const [motionMode, setMotionMode] = useState<string | undefined>(model?.defaultMotionMode);
   const [resolution, setResolution] = useState<string | undefined>(model?.defaultMotionResolution);
+  // Generic live-schema extras (see src/lib/extra-params.ts) — local state,
+  // same as EditVideoComposer, since this composer doesn't use the shared
+  // composer store. Empty for Act-Two/Wan Animate today, but any motion
+  // model whose schema exposes a whitelisted param surfaces it here with
+  // zero wiring.
+  const [extraParams, setExtraParams] = useState<Record<string, string | number | boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<{ url: string; kind: "video" | "image" } | null>(null);
 
+  const schema = useModelSchema(model?.id);
+
   // Re-sync the model-specific defaults whenever the user switches models —
   // otherwise switching from Wan Animate to Act-Two (or back) could carry
-  // over a stale aspect ratio / mode / resolution that the new model
-  // doesn't even support.
+  // over a stale aspect ratio / mode / resolution (or extras) that the new
+  // model doesn't even support.
   useEffect(() => {
     setAspectRatio(model?.defaultAspectRatio ?? "16:9");
     setMotionMode(model?.defaultMotionMode);
     setResolution(model?.defaultMotionResolution);
+    setExtraParams({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
@@ -141,7 +152,12 @@ export function MotionControlComposer({ onGenerated }: { onGenerated?: () => voi
           prompt: "",
           videoUrl: motionVideoUrl,
           characterImageUrl: characterUrl,
-          settings: { aspectRatio, motionMode, resolution },
+          settings: {
+            aspectRatio,
+            motionMode,
+            resolution,
+            extraParams: Object.keys(extraParams).length ? extraParams : undefined,
+          },
         }),
       });
       if (!res.ok) {
@@ -268,6 +284,16 @@ export function MotionControlComposer({ onGenerated }: { onGenerated?: () => voi
           }))}
         />
       )}
+
+      {/* Generic live-schema extras — see the extraParams state above. */}
+      <div className="flex flex-wrap items-center gap-2 empty:hidden">
+        <ExtraParamControls
+          schema={schema}
+          values={extraParams}
+          onChange={(field, value) => setExtraParams((prev) => ({ ...prev, [field]: value }))}
+          direction="down"
+        />
+      </div>
 
       {error && <div className="text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
 

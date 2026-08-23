@@ -103,8 +103,11 @@ export function StudioView({ category }: { category: Category }) {
 
       {/* Main stage */}
       <div className="flex-1 flex flex-col min-w-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
-          <div className="flex items-center gap-1">
+        {/* flex-wrap + gap-y: on a narrow window the search/filter controls
+            drop to their own row instead of squeezing the tabs into wrapped
+            labels and clipping off the right edge. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {(
               [
                 { id: "creations", label: "Creations", icon: Sparkles },
@@ -117,7 +120,7 @@ export function StudioView({ category }: { category: Category }) {
                   key={t.id}
                   onClick={() => setMainTab(t.id)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
                     mainTab === t.id ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
                   )}
                 >
@@ -128,7 +131,7 @@ export function StudioView({ category }: { category: Category }) {
             })}
           </div>
           {mainTab === "creations" && (
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
               <GalleryToolbar search={search} onSearch={setSearch} filters={filters} onFilters={setFilters} showTool={false} />
               <GridSizeSlider value={colWidth} onChange={setColWidth} />
             </div>

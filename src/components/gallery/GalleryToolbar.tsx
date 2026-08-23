@@ -24,14 +24,16 @@ export function GalleryToolbar({
   showTool?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 focus-within:border-accent transition-colors">
+    <div className="flex min-w-0 items-center gap-2">
+      {/* min-w-0 both here and on the input lets the search box give up
+          width first on a cramped header instead of forcing an overflow. */}
+      <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-border-subtle bg-surface px-2.5 py-1.5 focus-within:border-accent transition-colors">
         <Search className="h-3.5 w-3.5 text-muted shrink-0" />
         <input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder="Search…"
-          className="w-28 sm:w-40 bg-transparent text-xs outline-none placeholder:text-muted"
+          className="w-28 sm:w-40 min-w-0 bg-transparent text-xs outline-none placeholder:text-muted"
         />
         {search && (
           <button onClick={() => onSearch("")} className="text-muted hover:text-foreground">

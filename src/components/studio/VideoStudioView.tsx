@@ -144,8 +144,12 @@ export function VideoStudioView() {
 
       <div className="flex-1 flex min-h-0 rounded-2xl border border-border-subtle/60 bg-surface/30 backdrop-blur-md shadow-lg overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
-            <div className="flex items-center gap-1">
+          {/* flex-wrap + gap-y: on a narrow window (small MacBook, split
+              screen) the search/filter/view controls drop to their own row
+              instead of squeezing the tabs into wrapped labels and clipping
+              the Grid toggle off the right edge. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-4 md:px-6 py-3 border-b border-border-subtle/60 shrink-0">
+            <div className="flex shrink-0 items-center gap-1">
               {(
                 [
                   { id: "creations", label: "Creations", icon: Sparkles },
@@ -158,7 +162,7 @@ export function VideoStudioView() {
                     key={t.id}
                     onClick={() => setMainTab(t.id)}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
                       mainTab === t.id ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
                     )}
                   >
@@ -169,29 +173,33 @@ export function VideoStudioView() {
               })}
             </div>
             {mainTab === "creations" && (
-              <div className="flex items-center gap-2">
+              <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
                 <GalleryToolbar search={search} onSearch={setSearch} filters={filters} onFilters={setFilters} showTool={false} />
                 {historyView === "grid" && items.length > 0 && (
                   <GridSizeSlider value={colWidth} onChange={setColWidth} />
                 )}
-                <div className="flex items-center gap-0.5 rounded-lg border border-border-subtle p-0.5">
+                <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border-subtle p-0.5">
+                  {/* Text labels collapse to icon-only below xl so the pair
+                      stays compact on a small window. */}
                   <button
                     onClick={() => setHistoryView("list")}
+                    title="List view"
                     className={cn(
-                      "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                      "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors whitespace-nowrap",
                       historyView === "list" ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
                     )}
                   >
-                    <List className="h-3.5 w-3.5" /> List
+                    <List className="h-3.5 w-3.5" /> <span className="hidden xl:inline">List</span>
                   </button>
                   <button
                     onClick={() => setHistoryView("grid")}
+                    title="Grid view"
                     className={cn(
-                      "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                      "flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors whitespace-nowrap",
                       historyView === "grid" ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground"
                     )}
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" /> Grid
+                    <LayoutGrid className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Grid</span>
                   </button>
                 </div>
               </div>

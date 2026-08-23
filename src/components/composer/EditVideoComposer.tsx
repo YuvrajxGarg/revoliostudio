@@ -9,7 +9,10 @@ import { Dropdown } from "@/components/ui/Dropdown";
 import { AspectRatioIcon } from "@/components/ui/AspectRatioIcon";
 import { ModelSelector } from "./ModelSelector";
 import { ActivePresetCard, mergePresetPrompt } from "./PromptComposer";
+import { ExtraParamControls } from "./ExtraParamControls";
+import { MediaReferenceList } from "./MediaReferenceList";
 import { useComposerStore } from "@/store/composerStore";
+import { useModelSchema } from "@/hooks/useModelSchema";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 
@@ -47,6 +50,36 @@ export function EditVideoComposer({
   const [elementsUploading, setElementsUploading] = useState(false);
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [aspectRatio, setAspectRatio] = useState(model?.defaultAspectRatio ?? "16:9");
+  // Generic live-schema extras (see src/lib/extra-params.ts) — this composer
+  // doesn't use the shared composer store, so they live in local state and
+  // reset on model switch. This is how wan2.7-video-edit's negative_prompt +
+  // audio_setting and Kling motion-control's character_orientation surface.
+  const [extraParams, setExtraParams] = useState<Record<string, string | number | boolean>>({});
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [seed, setSeed] = useState<number | undefined>(undefined);
+  // Audio reference(s) — Seedance 2.0 Video Edit's audio_files / 2.5's
+  // audios_list, shown only when the live schema confirms the field.
+  const [audioRefs, setAudioRefs] = useState<{ id: string; url: string; name: string }[]>([]);
+  const [audioUploading, setAudioUploading] = useState(false);
+
+  const schema = useModelSchema(model?.id);
+  const schemaOk = !!schema && !schema.error;
+  // Live schema wins for the reference-elements cap (same reasoning as
+  // PromptComposer's maxRefs) — registry value while loading/errored.
+  const refCap = (schemaOk ? schema.maxReferenceImages : null) ?? model?.maxReferences ?? 4;
+  // A few v2v models (Kling motion-control, face swap, dance effects,
+  // reframe) take a single image_url instead of images_list — see the v2v
+  // branch of buildPayload. Their registry entries cap maxReferences at 1.
+  const audioRefField = schemaOk ? schema.audioRefField : null;
+
+  // Same stale-value guard as SettingsBar's extraParams pruning: a toggle
+  // flipped on one model must not ride into the next model's submit.
+  useEffect(() => {
+    setExtraParams({});
+    setNegativePrompt("");
+    setSeed(undefined);
+    setAudioRefs([]);
+  }, [modelId]);
 
   // Re-apply whenever a fresh template is picked while this tab is already
   // open (initialModelId/initialPrompt only run once on mount otherwise).
@@ -78,7 +111,7 @@ export function EditVideoComposer({
   }
 
   async function handleElementUpload(file: File) {
-    if (elements.length >= (model?.maxReferences ?? 4)) return;
+    if (elements.length >= refCap) return;
     setElementsUploading(true);
     setError(null);
     try {
@@ -88,6 +121,20 @@ export function EditVideoComposer({
       setError(err instanceof Error ? err.message : "Failed to upload image");
     } finally {
       setElementsUploading(false);
+    }
+  }
+
+  async function handleAudioUpload(file: File) {
+    if (!audioRefField || audioRefs.length >= audioRefField.max) return;
+    setAudioUploading(true);
+    setError(null);
+    try {
+      const { url, name } = await uploadReferenceFile(file);
+      setAudioRefs((prev) => [...prev, { id: crypto.randomUUID(), url, name }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload audio");
+    } finally {
+      setAudioUploading(false);
     }
   }
 
@@ -109,7 +156,14 @@ export function EditVideoComposer({
           prompt: finalPrompt,
           videoUrl,
           references: elements.map((e) => e.url),
-          settings: { aspectRatio, keepOriginalSound: keepSound },
+          audioUrls: audioRefs.length ? audioRefs.map((a) => a.url) : undefined,
+          settings: {
+            aspectRatio,
+            keepOriginalSound: keepSound,
+            seed,
+            negativePrompt: negativePrompt.trim() || undefined,
+            extraParams: Object.keys(extraParams).length ? extraParams : undefined,
+          },
           toolId: toolId ?? null,
         }),
       });
@@ -181,7 +235,7 @@ export function EditVideoComposer({
               </button>
             </div>
           ))}
-          {elements.length < (model?.maxReferences ?? 4) && (
+          {elements.length < refCap && (
             <label className="h-14 w-14 shrink-0 rounded-lg border border-dashed border-border-subtle flex items-center justify-center text-muted hover:text-foreground hover:border-foreground/40 transition-colors cursor-pointer">
               {elementsUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               <input
@@ -197,8 +251,22 @@ export function EditVideoComposer({
             </label>
           )}
         </div>
-        <p className="mt-1 text-[11px] text-muted">Upload images &amp; elements (optional) — up to {model?.maxReferences ?? 4}</p>
+        <p className="mt-1 text-[11px] text-muted">Upload images &amp; elements (optional) — up to {refCap}</p>
       </div>
+
+      {/* Audio reference(s), schema-gated — Seedance 2.0 Video Edit's
+          audio_files / 2.5 (480p)'s audios_list. */}
+      {audioRefField && (
+        <MediaReferenceList
+          kind="audio"
+          label={audioRefField.isArray ? "Audio references (optional)" : "Audio reference (optional)"}
+          items={audioRefs}
+          max={audioRefField.max}
+          uploading={audioUploading}
+          onUpload={handleAudioUpload}
+          onRemove={(id) => setAudioRefs((prev) => prev.filter((a) => a.id !== id))}
+        />
+      )}
 
       <textarea
         value={prompt}
@@ -231,6 +299,20 @@ export function EditVideoComposer({
           icon: <AspectRatioIcon ratio={ar} />,
         }))}
       />
+
+      {/* Generic live-schema extras — see the extraParams state above. */}
+      <div className="flex flex-wrap items-center gap-2 empty:hidden">
+        <ExtraParamControls
+          schema={schema}
+          values={extraParams}
+          onChange={(field, value) => setExtraParams((prev) => ({ ...prev, [field]: value }))}
+          negativePrompt={negativePrompt}
+          onNegativePromptChange={setNegativePrompt}
+          seed={seed}
+          onSeedChange={setSeed}
+          direction="down"
+        />
+      </div>
 
       {error && <div className="text-xs text-danger-text">{formatErrorMessage(error).message}</div>}
 

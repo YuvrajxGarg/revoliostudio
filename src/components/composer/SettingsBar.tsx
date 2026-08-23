@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { Dices, Minus, MicOff, Plus, Proportions, Sparkles, Tag, Volume2 } from "lucide-react";
+import { Minus, MicOff, Plus, Proportions, Sparkles, Tag, Volume2 } from "lucide-react";
 import { ModelConfig } from "@/lib/models";
 import { useComposerStore } from "@/store/composerStore";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Toggle } from "@/components/ui/Toggle";
 import { AspectRatioIcon } from "@/components/ui/AspectRatioIcon";
+import { ExtraParamControls } from "./ExtraParamControls";
 import type { ModelSchemaInfo } from "@/lib/model-schema-types";
 
 // Magnific-style friendly names shown beside each ratio in the menu.
@@ -309,78 +310,22 @@ export function SettingsBar({
       )}
 
       {/* ── Generic live-schema extras (see src/lib/extra-params.ts) ──────
-          Everything below is driven entirely by the whitelisted subset of
-          the model's live schema — no per-model wiring. This is how e.g.
-          Seedance 2.5's high-bitrate toggle, gpt-image-2's quality picker,
-          Midjourney's stylize/chaos/weird sliders, and nano-banana-effects'
-          preset dropdown all surface. */}
-
-      {schemaOk &&
-        schema.extraEnums.map((d) => (
-          <Dropdown
-            key={d.field}
-            value={String(extraParams[d.field] ?? d.default)}
-            options={d.values.map((v) => ({ value: v, label: v }))}
-            onChange={(v) => setExtra(d.field, v)}
-            panelTitle={d.label}
-            direction={direction}
-          />
-        ))}
-
-      {schemaOk &&
-        schema.extraBooleans.map((d) => (
-          <div key={d.field} className="control-pill">
-            <span>{d.label}</span>
-            <Toggle
-              checked={(extraParams[d.field] as boolean | undefined) ?? d.default}
-              onChange={(v) => setExtra(d.field, v)}
-            />
-          </div>
-        ))}
-
-      {schemaOk &&
-        schema.extraNumbers.map((d) => (
-          <div key={d.field} className="control-pill" title={`${d.label} (${d.min}–${d.max})`}>
-            <span>{d.label}</span>
-            <input
-              type="range"
-              min={d.min}
-              max={d.max}
-              step={d.step}
-              value={Number(extraParams[d.field] ?? d.default)}
-              onChange={(e) => setExtra(d.field, Number(e.target.value))}
-              className="w-20 slider-thin"
-            />
-            <span className="tabular-nums min-w-[2rem] text-right">{Number(extraParams[d.field] ?? d.default)}</span>
-          </div>
-        ))}
-
-      {schemaOk && schema.negativePromptField && (
-        <div className="control-pill" title="What the model should avoid">
-          <input
-            type="text"
-            value={settings.negativePrompt ?? ""}
-            onChange={(e) => updateSettings({ negativePrompt: e.target.value })}
-            placeholder="Negative prompt (optional)"
-            className="w-36 bg-transparent text-xs outline-none placeholder:text-muted"
-          />
-        </div>
-      )}
-
-      {schemaOk && schema.seedField && (
-        <div className="control-pill" title="Seed — same seed + same prompt reproduces a result. Blank = random.">
-          <Dices className="h-3 w-3 text-muted shrink-0" />
-          <input
-            type="number"
-            value={settings.seed ?? ""}
-            onChange={(e) =>
-              updateSettings({ seed: e.target.value === "" ? undefined : Math.trunc(Number(e.target.value)) })
-            }
-            placeholder="Seed"
-            className="w-16 bg-transparent text-xs outline-none placeholder:text-muted [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-        </div>
-      )}
+          Driven entirely by the whitelisted subset of the model's live
+          schema — no per-model wiring. This is how e.g. Seedance 2.5's
+          high-bitrate toggle, gpt-image-2's quality picker, Midjourney's
+          stylize/chaos/weird sliders, and nano-banana-effects' preset
+          dropdown all surface. Shared with the store-free composers (Edit
+          Video / Motion Control / Tripo 3D) via ExtraParamControls. */}
+      <ExtraParamControls
+        schema={schema}
+        values={extraParams}
+        onChange={setExtra}
+        negativePrompt={settings.negativePrompt}
+        onNegativePromptChange={(v) => updateSettings({ negativePrompt: v })}
+        seed={settings.seed}
+        onSeedChange={(v) => updateSettings({ seed: v })}
+        direction={direction}
+      />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   EXTRA_ENUM_FIELDS,
   EXTRA_NUMBER_FIELDS,
   NEGATIVE_PROMPT_CANDIDATES,
+  VIDEO_LIST_CANDIDATES,
+  AUDIO_REF_CANDIDATES,
 } from "@/lib/extra-params";
 
 // Candidate live-schema field names for "how many outputs" and "generate
@@ -93,6 +95,20 @@ interface GenerateBody {
   videoUrl?: string | null;
   /** Character image for Motion Control (runway-act-two style dual input). */
   characterImageUrl?: string | null;
+  /**
+   * Multi-video references for models whose schema exposes a video ARRAY
+   * (Seedance Omni's videos_list/video_files, wan2.7-ref's videos_list) —
+   * see VIDEO_LIST_CANDIDATES in extra-params.ts. Only forwarded under a
+   * schema-confirmed field name; unrelated to the single `videoUrl` above.
+   */
+  videoUrls?: string[];
+  /**
+   * Audio reference(s) for models whose schema exposes an audio input —
+   * a single `audio_url` string (wan2.7 t2v/i2v) or an array
+   * (`audios_list`/`audio_files` on Seedance Omni / Video Edit). See
+   * AUDIO_REF_CANDIDATES in extra-params.ts.
+   */
+  audioUrls?: string[];
   /**
    * Inpaint: a black/white PNG (white = region to edit, black = region to
    * preserve), same pixel dimensions as the source image — restricts a
@@ -193,6 +209,9 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
     model.mode === "t2a" ||
     wantsOptionalVideoRef ||
     !!body.maskUrl ||
+    // v2v reference "elements" need the schema to pick images_list vs a
+    // single image_url (see the v2v branch below).
+    (model.mode === "v2v" && !!body.references?.length) ||
     // The ghost-field fixes and the generic extras below all need the live
     // schema — in practice this makes the probe near-universal, which is
     // fine: submits are heavyweight anyway and the probe result decides
@@ -201,6 +220,8 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
     !!model.durations?.length ||
     !!settings.duration ||
     !!settings.negativePrompt?.trim() ||
+    !!body.videoUrls?.length ||
+    !!body.audioUrls?.length ||
     (settings.extraParams != null && Object.keys(settings.extraParams).length > 0);
   if (needsSchema) {
     try {
@@ -289,6 +310,27 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
             payload[key] = n;
           }
         }
+      }
+    }
+
+    // ── Video / audio references (see VIDEO_LIST_CANDIDATES /
+    // AUDIO_REF_CANDIDATES in extra-params.ts) — only ever sent under a
+    // field name the live schema actually confirms, and never under a v2v
+    // model's own primary video field (that's body.videoUrl, handled in the
+    // v2v branch below).
+    if (body.videoUrls?.length) {
+      const fieldName = VIDEO_LIST_CANDIDATES.find((key) => key !== model.videoFieldName && liveProps![key]);
+      if (fieldName) {
+        payload[fieldName] = body.videoUrls.slice(0, liveProps[fieldName].maxItems ?? body.videoUrls.length);
+      }
+    }
+    if (body.audioUrls?.length) {
+      const fieldName = AUDIO_REF_CANDIDATES.find((key) => liveProps![key]);
+      if (fieldName) {
+        payload[fieldName] =
+          fieldName === "audio_url"
+            ? body.audioUrls[0]
+            : body.audioUrls.slice(0, liveProps[fieldName].maxItems ?? body.audioUrls.length);
       }
     }
   } else {
@@ -394,7 +436,17 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
       payload[videoKey] = model.videoInputIsArray ? [body.videoUrl] : body.videoUrl;
     }
     if (body.references?.length) {
-      payload.images_list = body.references.slice(0, referenceCap);
+      // Most v2v models take reference "elements" as images_list, but a few
+      // (Kling motion-control, ai-video-face-swap, ai-dance-effects,
+      // luma-flash-reframe) only have a single image_url in their real
+      // schema — the 2026-08 audit found their references being sent under
+      // an images_list field the API doesn't recognize. Schema-confirm which
+      // shape this model actually takes; probe failed → legacy behavior.
+      if (!liveProps || liveProps.images_list) {
+        payload.images_list = body.references.slice(0, referenceCap);
+      } else if (liveProps.image_url) {
+        payload.image_url = body.references[0];
+      }
     }
     if (model.supportsKeepSound !== false && typeof body.settings?.keepOriginalSound === "boolean") {
       payload.keep_original_sound = body.settings.keepOriginalSound;

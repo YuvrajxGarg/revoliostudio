@@ -10,6 +10,10 @@ import { Toggle } from "@/components/ui/Toggle";
 import { cn } from "@/lib/utils";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
+import { ExtraParamControls } from "./ExtraParamControls";
+import { useModelSchema } from "@/hooks/useModelSchema";
+
+const TRIPO_MODEL_ID = "tripo-h31-t23d";
 
 function pickMeshyModelId(numImages: number): string {
   if (numImages === 0) return "meshy-text-to-3d";
@@ -59,12 +63,30 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which 3D provider drives this panel. Meshy keeps its original behavior
+  // (auto-picks text/image/multi-image by reference count + the hardcoded
+  // quality fields below, all verified against its live schemas). Tripo is
+  // text-only and its whole quality panel (texture/pbr/quad, texture &
+  // geometry quality, face limit, negative prompt) is discovered live via
+  // the generic extra-params whitelist instead of hardcoded here.
+  const [engine, setEngine] = useState<"meshy" | "tripo">("meshy");
 
   useEffect(() => setCategory("3d"), [setCategory]);
 
-  const modelId = pickMeshyModelId(references.length);
+  const modelId = engine === "tripo" ? TRIPO_MODEL_ID : pickMeshyModelId(references.length);
   const model = getModel(modelId);
   const hasImages = references.length > 0;
+  const isTripo = engine === "tripo";
+  // Only Tripo needs the live probe — every Meshy control below is static.
+  const tripoSchema = useModelSchema(isTripo ? TRIPO_MODEL_ID : undefined);
+
+  function switchEngine(next: "meshy" | "tripo") {
+    if (next === engine) return;
+    setEngine(next);
+    // Extras are schema-scoped — don't let a Tripo toggle ride into a Meshy
+    // submit (or vice versa). Same stale-value reasoning as SettingsBar.
+    updateSettings({ extraParams: {}, negativePrompt: undefined, seed: undefined });
+  }
 
   const topology = settings.topology ?? "triangle";
   const targetPolycount = settings.targetPolycount ?? 30000;
@@ -110,8 +132,8 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
 
   async function handleSubmit() {
     if (isSubmitting || !model) return;
-    if (!hasImages && !prompt.trim()) {
-      setError("Add a prompt or attach at least one reference image");
+    if (isTripo ? !prompt.trim() : !hasImages && !prompt.trim()) {
+      setError(isTripo ? "Add a prompt — Tripo is text-to-3D only" : "Add a prompt or attach at least one reference image");
       return;
     }
     setError(null);
@@ -144,7 +166,24 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Prompt" hint={hasImages ? "Optional when reference images are attached" : "Describe the object to generate"}>
+      <Field label="Engine" hint="Meshy auto-picks its text/image/multi-image model by reference count. Tripo H3.1 is text-only, with its own quality options read live from its schema.">
+        <div className="flex items-center gap-1 rounded-xl border border-border-subtle bg-surface-2 p-1">
+          {(["meshy", "tripo"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => switchEngine(value)}
+              className={`flex-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                engine === value ? "bg-accent text-white" : "text-muted hover:text-foreground hover:bg-surface"
+              }`}
+            >
+              {value === "meshy" ? "Meshy" : "Tripo H3.1"}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Prompt" hint={!isTripo && hasImages ? "Optional when reference images are attached" : "Describe the object to generate"}>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -154,6 +193,35 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
         />
       </Field>
 
+      {/* Tripo takes no image input — its whole quality panel is the
+          schema-driven extras row (texture/pbr/quad/auto-size toggles,
+          texture & geometry quality, face limit, negative prompt). */}
+      {isTripo && (
+        <Field label="Quality & Output" hint="Options read live from Tripo's own schema">
+          <div className="flex flex-wrap items-center gap-2">
+            {tripoSchema && !tripoSchema.error ? (
+              <ExtraParamControls
+                schema={tripoSchema}
+                values={settings.extraParams ?? {}}
+                onChange={(field, value) =>
+                  updateSettings({ extraParams: { ...(settings.extraParams ?? {}), [field]: value } })
+                }
+                negativePrompt={settings.negativePrompt}
+                onNegativePromptChange={(v) => updateSettings({ negativePrompt: v })}
+                seed={settings.seed}
+                onSeedChange={(v) => updateSettings({ seed: v })}
+                direction="down"
+              />
+            ) : (
+              <span className="text-xs text-muted">
+                {tripoSchema?.error ? "Couldn't load Tripo's options — defaults will be used." : "Loading options…"}
+              </span>
+            )}
+          </div>
+        </Field>
+      )}
+
+      {!isTripo && (
       <Field label={`Reference Images ${hasImages ? "" : "(optional)"}`} hint={`Attach 1-${MAX_3D_REFS} images of the object from different angles to build the mesh from`}>
         <div className="grid grid-cols-4 gap-2">
           {references.map((ref) => (
@@ -191,7 +259,13 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
         />
         <span className="text-[11px] text-muted">{references.length}/{MAX_3D_REFS} items</span>
       </Field>
+      )}
 
+      {/* Everything from here to the safety checker is the Meshy quality
+          panel — verified against Meshy's own live schemas, hidden for
+          Tripo (whose equivalents surface via the extras row above). */}
+      {!isTripo && (
+      <>
       {hasImages && (
         <Field label="Use Image Texture" hint="Textures the mesh from your reference image so the model reuses the photo's colors and surface look. Turn off for an untextured (grey) mesh.">
           <div className="flex items-center justify-between">
@@ -303,6 +377,8 @@ export function Model3DComposer({ onGenerated }: { onGenerated?: () => void }) {
             </div>
           </Field>
         </>
+      )}
+      </>
       )}
 
       <Field label="Enable Safety Checker" hint="Filter prompts that may violate content policy before they run.">

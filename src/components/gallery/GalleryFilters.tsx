@@ -81,7 +81,7 @@ export function GalleryFilters({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
+          "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors whitespace-nowrap",
           active > 0
             ? "border-accent/60 bg-accent/10 text-foreground"
             : "border-border-subtle bg-surface text-muted hover:text-foreground"
@@ -97,7 +97,7 @@ export function GalleryFilters({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border-subtle bg-surface p-4 shadow-2xl flex flex-col gap-4">
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border-subtle bg-surface p-4 shadow-2xl flex flex-col gap-4">
           <Section label="Date range">
             <div className="flex items-center gap-2">
               <input

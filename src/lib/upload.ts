@@ -42,14 +42,18 @@ function formatMB(bytes: number): string {
 export async function uploadReferenceFile(file: File): Promise<UploadResult> {
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
-  if (!isImage && !isVideo) {
-    throw new Error("Only image or video files are supported.");
+  // Audio references (wan2.7's audio_url, Seedance Omni's audios_list) share
+  // the video ceiling — both are just "big media file" as far as Supabase is
+  // concerned.
+  const isAudio = file.type.startsWith("audio/");
+  if (!isImage && !isVideo && !isAudio) {
+    throw new Error("Only image, video, or audio files are supported.");
   }
 
-  const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
   if (file.size > maxBytes) {
     throw new Error(
-      `File too large: ${formatMB(file.size)} (max ${formatMB(maxBytes)} for ${isVideo ? "videos" : "images"}).`
+      `File too large: ${formatMB(file.size)} (max ${formatMB(maxBytes)} for ${isImage ? "images" : isVideo ? "videos" : "audio"}).`
     );
   }
 
@@ -61,7 +65,7 @@ export async function uploadReferenceFile(file: File): Promise<UploadResult> {
     throw new Error("You need to be signed in to upload files.");
   }
 
-  const ext = file.name.split(".").pop() || (isVideo ? "mp4" : "png");
+  const ext = file.name.split(".").pop() || (isVideo ? "mp4" : isAudio ? "mp3" : "png");
   const path = `${user.id}/${Date.now()}-${nanoid(6)}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
