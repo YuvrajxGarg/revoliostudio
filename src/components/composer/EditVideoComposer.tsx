@@ -57,6 +57,7 @@ export function EditVideoComposer({
   const [extraParams, setExtraParams] = useState<Record<string, string | number | boolean>>({});
   const [negativePrompt, setNegativePrompt] = useState("");
   const [seed, setSeed] = useState<number | undefined>(undefined);
+  const [duration, setDuration] = useState<number | undefined>(undefined);
   // Audio reference(s) — Seedance 2.0 Video Edit's audio_files / 2.5's
   // audios_list, shown only when the live schema confirms the field.
   const [audioRefs, setAudioRefs] = useState<{ id: string; url: string; name: string }[]>([]);
@@ -71,6 +72,23 @@ export function EditVideoComposer({
   // reframe) take a single image_url instead of images_list — see the v2v
   // branch of buildPayload. Their registry entries cap maxReferences at 1.
   const audioRefField = schemaOk ? schema.audioRefField : null;
+  // Duration control, live-schema-driven with the same precedence as
+  // SettingsBar: a min/max slider when the schema has bounds (e.g. Seedance
+  // 2.5 Video Edit's 4-30s int), the schema's discrete enum otherwise, the
+  // registry's static list while loading/errored, and no control at all for
+  // schema-confirmed models without a duration field.
+  const durationSlider = schemaOk ? schema.duration : null;
+  const durationOptions = schemaOk
+    ? schema.hasDurationField
+      ? (schema.durationOptions ?? model?.durations ?? null)
+      : null
+    : (model?.durations ?? null);
+  const currentDuration =
+    duration ??
+    durationSlider?.default ??
+    (schemaOk ? schema.defaultDuration : null) ??
+    model?.defaultDuration ??
+    durationOptions?.[0];
 
   // Same stale-value guard as SettingsBar's extraParams pruning: a toggle
   // flipped on one model must not ride into the next model's submit.
@@ -78,6 +96,7 @@ export function EditVideoComposer({
     setExtraParams({});
     setNegativePrompt("");
     setSeed(undefined);
+    setDuration(undefined);
     setAudioRefs([]);
   }, [modelId]);
 
@@ -92,7 +111,9 @@ export function EditVideoComposer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const estimatedCostUSD = model ? estimateCostUSD(model, {}) : 0;
+  // Per-second models (the whole Seedance 2.5 Video Edit family) need the
+  // selected duration or the button shows the 5s price for a 30s clip.
+  const estimatedCostUSD = model ? estimateCostUSD(model, { duration: currentDuration }) : 0;
 
   async function handleVideoUpload(file: File) {
     setVideoUploading(true);
@@ -159,6 +180,7 @@ export function EditVideoComposer({
           audioUrls: audioRefs.length ? audioRefs.map((a) => a.url) : undefined,
           settings: {
             aspectRatio,
+            duration: currentDuration,
             keepOriginalSound: keepSound,
             seed,
             negativePrompt: negativePrompt.trim() || undefined,
@@ -290,15 +312,41 @@ export function EditVideoComposer({
         </div>
       )}
 
-      <Dropdown
-        value={aspectRatio}
-        onChange={setAspectRatio}
-        options={(model?.aspectRatios ?? ["16:9", "9:16", "1:1"]).map((ar) => ({
-          value: ar,
-          label: ar,
-          icon: <AspectRatioIcon ratio={ar} />,
-        }))}
-      />
+      <div className="flex items-center gap-2 flex-wrap">
+        <Dropdown
+          value={aspectRatio}
+          onChange={setAspectRatio}
+          options={(model?.aspectRatios ?? ["16:9", "9:16", "1:1"]).map((ar) => ({
+            value: ar,
+            label: ar,
+            icon: <AspectRatioIcon ratio={ar} />,
+          }))}
+        />
+        {durationSlider ? (
+          <div className="control-pill">
+            <input
+              type="range"
+              min={durationSlider.min}
+              max={durationSlider.max}
+              step={durationSlider.step}
+              value={currentDuration ?? durationSlider.default}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="w-20 slider-thin"
+            />
+            <span className="tabular-nums w-9 text-right">{currentDuration ?? durationSlider.default}s</span>
+          </div>
+        ) : (
+          durationOptions &&
+          durationOptions.length > 0 && (
+            <Dropdown
+              value={String(currentDuration ?? durationOptions[0])}
+              options={durationOptions.map((d) => ({ value: String(d), label: `${d}s` }))}
+              onChange={(v) => setDuration(Number(v))}
+              panelTitle="Duration"
+            />
+          )
+        )}
+      </div>
 
       {/* Generic live-schema extras — see the extraParams state above. */}
       <div className="flex flex-wrap items-center gap-2 empty:hidden">

@@ -234,7 +234,13 @@ const VIDEO_PER_SECOND_COST_USD: Record<string, number> = {
   "seedance-2-mini-t2v": 0.15,
   "seedance-pro-t2v-fast": 0.03,
   "vidu-q3-turbo-i2v": 0.06,
+  // Seedance 2.5 Video Edit tiers follow the same 2x-per-tier per-second
+  // ladder as the rest of the 2.5 family below (catalog 5s costs $0.85 /
+  // $1.70 / $4.25 / $8.50 — exactly 0.17/0.34/0.85/1.70 per second).
   "seedance-2.5-video-edit-480p": 0.17,
+  "seedance-2.5-video-edit": 0.34,
+  "seedance-2.5-video-edit-1080p": 0.85,
+  "seedance-2.5-video-edit-4k": 1.7,
   // Live: 5s=$0.65, 8s=$1.04, 10s=$1.30 -> 0.13/sec (catalog said flat $0.10).
   "wan2.7-video-edit": 0.13,
   "mmaudio-video-sound": 0.001,

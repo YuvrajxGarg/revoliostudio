@@ -12,6 +12,15 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "v1.78",
+    title: "Seedance 2.5 Video Edit in 720p, 1080p, and 4K",
+    tag: "New",
+    highlights: [
+      "Seedance 2.5 Video Edit is no longer 480p-only — the standard 720p tier, full-HD 1080p, and 4K are now all selectable in the Edit Video tab, each priced at its real per-second rate ($0.85, $1.70, $4.25, and $8.50 for a 5-second clip).",
+      "The Edit Video tab now has a duration control it never had before — a 4–30 second slider on models whose schema supports one (like the Seedance 2.5 editors), a preset list on the rest — and the price on the Generate button finally scales with the length you pick instead of always quoting the 5-second cost.",
+    ],
+  },
+  {
     version: "v1.77",
     title: "A friendlier home page and a proper account menu",
     tag: "Improved",
