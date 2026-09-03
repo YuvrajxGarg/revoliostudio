@@ -12,7 +12,7 @@
  * cost here would be needless UI for negligible savings.
  */
 
-import { generateText, GeminiError } from "@/lib/gemini";
+import { generateText, generateJson, GeminiError } from "@/lib/gemini";
 import { DEFAULT_LLM_MODEL } from "@/lib/llmModels";
 import type { Category } from "@/lib/models";
 
@@ -89,4 +89,84 @@ export async function imageToPrompt(category: Category, imageUrl: string): Promi
   return run(() =>
     generateText({ model: DEFAULT_LLM_MODEL, systemInstruction, prompt: "Describe this as a generation prompt.", imageUrl })
   );
+}
+
+/** One candidate model the composer can actually switch to — passed in from the client so a suggestion never names a model that isn't selectable in the current studio (respects the composer's own modelFilter). */
+export interface VaryCandidateModel {
+  id: string;
+  label: string;
+  provider: string;
+}
+
+export interface VariationSuggestion {
+  /** A meaningfully reworked prompt — same core subject, different phrasing/detail — so a fresh regeneration actually diverges from the repeated ones. */
+  suggestedPrompt: string;
+  /** Id of a DIFFERENT model to try (one of the passed candidates), or null when none is a clearly better fit. */
+  suggestedModelId: string | null;
+  /** One short, friendly sentence explaining why this change should help. */
+  reason: string;
+}
+
+const VARY_SCHEMA = {
+  type: "object",
+  properties: {
+    suggestedPrompt: { type: "string" },
+    suggestedModelId: { type: "string" },
+    reason: { type: "string" },
+  },
+  required: ["suggestedPrompt", "reason"],
+};
+
+/**
+ * Backs the "you've generated this a few times" nudge (RepeatWarningModal):
+ * when a user has fired the same prompt + references at the same model more
+ * than twice, we offer a genuinely different thing to try rather than just
+ * telling them to change something. Returns a reworked prompt plus, when one
+ * of the offered candidate models fits better, its id — so the modal's
+ * "Use suggested settings" can swap both in one click.
+ *
+ * `candidates` is the composer's own selectable model list (already filtered
+ * to the current studio), minus the current model, so a suggested model is
+ * always one the user can actually pick here.
+ */
+export async function suggestVariation(params: {
+  category: Category;
+  draft: string;
+  currentModelLabel: string;
+  candidates: VaryCandidateModel[];
+}): Promise<VariationSuggestion> {
+  const noun = CATEGORY_NOUN[params.category];
+  const candidateList = params.candidates.length
+    ? params.candidates.map((m) => `- ${m.id} — ${m.label} (${m.provider})`).join("\n")
+    : "(no alternative models available — leave suggestedModelId empty)";
+  const systemInstruction = `The user keeps running the SAME ${noun} generation prompt on the SAME model (${params.currentModelLabel}) and getting repetitive results. Help them break out of it.
+
+Return:
+- suggestedPrompt: a reworked version of their prompt that keeps the same core subject/intent but changes the phrasing and adds fresh, specific creative direction (composition, lighting, style, mood, camera, detail) so a new run actually diverges from the previous ones. It must read as a clean, ready-to-use prompt — no preamble, no quotes.
+- suggestedModelId: the id of ONE model from the candidate list below that would plausibly give a different or better result, EXACTLY as written. Use an empty string if none is clearly worth switching to. Never invent an id that isn't in the list.
+- reason: one short, friendly sentence telling the user why this tweak should help.
+
+Candidate models the user can switch to:
+${candidateList}`;
+  const draft = params.draft.trim() || "(the user left the prompt empty and relied on references)";
+  try {
+    const raw = await generateJson<VariationSuggestion & { suggestedModelId?: string }>({
+      model: DEFAULT_LLM_MODEL,
+      systemInstruction,
+      prompt: draft,
+      responseSchema: VARY_SCHEMA,
+    });
+    const validId =
+      raw.suggestedModelId && params.candidates.some((m) => m.id === raw.suggestedModelId)
+        ? raw.suggestedModelId
+        : null;
+    return {
+      suggestedPrompt: (raw.suggestedPrompt ?? "").trim(),
+      suggestedModelId: validId,
+      reason: (raw.reason ?? "").trim(),
+    };
+  } catch (err) {
+    const message = err instanceof GeminiError ? err.message : "Couldn't fetch a suggestion";
+    throw new PromptAssistError(message);
+  }
 }

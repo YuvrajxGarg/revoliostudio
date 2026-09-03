@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Eye, Loader2, Plus, SquarePen, Trash2, Video, X } from "lucide-react";
-import { useComposerStore, type ActivePreset } from "@/store/composerStore";
+import { useComposerStore, generationSignature, type ActivePreset } from "@/store/composerStore";
 import { Category, DEFAULT_MODEL_ID, EDIT_COUNTERPART, ModelConfig, modelsByCategory } from "@/lib/models";
 import { cn } from "@/lib/utils";
 import { GenerateIcon } from "@/components/ui/GenerateIcon";
@@ -14,6 +14,7 @@ import { SettingsBar } from "./SettingsBar";
 import { MentionPopover, type MentionItem } from "./MentionPopover";
 import { MentionHighlightTextarea } from "./MentionHighlightTextarea";
 import { PromptEditorModal } from "./PromptEditorModal";
+import { RepeatWarningModal } from "./RepeatWarningModal";
 import { ReferencePicker, IMAGE_CATEGORIES, TAG_CATEGORIES, type ReferencePickResult } from "./ReferencePicker";
 import type { RefCategory } from "@/hooks/useCuratedReferences";
 import { estimateCostUSD, formatCostUSD, formatCostINR } from "@/lib/pricing";
@@ -362,6 +363,8 @@ export function PromptComposer({
     resetAfterSubmit,
     projectId,
     updateSettings,
+    repeatCounts,
+    noteGeneration,
   } = useComposerStore();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -373,7 +376,13 @@ export function PromptComposer({
   const [videoRefUploading, setVideoRefUploading] = useState(false);
   const [mediaRefUploading, setMediaRefUploading] = useState(false);
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
+  const [repeatWarnOpen, setRepeatWarnOpen] = useState(false);
   const [referencePickerCategory, setReferencePickerCategory] = useState<RefCategory | null>(null);
+  // Signatures the user chose to run despite the repeat nudge — so "Generate
+  // anyway" (and any further clicks on that exact combo) don't re-warn every
+  // time. Session-scoped; tweaking the prompt/model yields a new signature
+  // that can warn fresh once it crosses the threshold again.
+  const acknowledgedRepeatsRef = useRef<Set<string>>(new Set());
 
   // Cmd/Ctrl+E opens the expanded Prompt editor from anywhere in this
   // composer instance, matching the shortcut hint shown on its own trigger
@@ -634,10 +643,21 @@ export function PromptComposer({
     requestAnimationFrame(() => el.focus());
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(force = false) {
     if (!model || isSubmitting) return;
     const hasPresetPrompt = !!activePreset?.prompt?.trim();
     if (!prompt.trim() && !hasPresetPrompt && references.length === 0 && !startFrame && !videoReference) return;
+
+    // Nudge when the user keeps firing the exact same prompt + references at
+    // the same model. `repeatCounts[sig]` is how many identical runs already
+    // happened; on the 3rd (count >= 2) we interrupt with the suggestion
+    // modal — unless they've already chosen to push this exact combo through.
+    const signature = generationSignature(model.id, prompt, references.map((r) => r.url));
+    if (!force && (repeatCounts[signature] ?? 0) >= 2 && !acknowledgedRepeatsRef.current.has(signature)) {
+      setRepeatWarnOpen(true);
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
     try {
@@ -671,6 +691,7 @@ export function PromptComposer({
       // Deliberately not clearing prompt/references here — keeping them in
       // the box lets the user regenerate the same setup or tweak it (e.g.
       // swap model) without retyping everything.
+      noteGeneration(signature);
       onGenerated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -757,9 +778,28 @@ export function PromptComposer({
     />
   );
 
+  const repeatWarningModal = repeatWarnOpen && model && (
+    <RepeatWarningModal
+      category={category}
+      prompt={prompt}
+      referenceUrls={references.map((r) => r.url)}
+      currentModel={model}
+      candidates={models}
+      onApplyPrompt={setPrompt}
+      onApplyModel={setModelId}
+      onGenerateAnyway={() => {
+        const sig = generationSignature(model.id, prompt, references.map((r) => r.url));
+        acknowledgedRepeatsRef.current.add(sig);
+        setRepeatWarnOpen(false);
+        handleSubmit(true);
+      }}
+      onClose={() => setRepeatWarnOpen(false)}
+    />
+  );
+
   const generateButton = isSidebar ? (
     <button
-      onClick={handleSubmit}
+      onClick={() => handleSubmit()}
       disabled={isSubmitting || !model}
       className="flex items-center justify-center gap-1.5 rounded-xl bg-accent text-white text-sm font-semibold disabled:opacity-40 hover:bg-accent-2 transition-colors w-full py-2.5"
     >
@@ -773,7 +813,7 @@ export function PromptComposer({
     </button>
   ) : (
     <button
-      onClick={handleSubmit}
+      onClick={() => handleSubmit()}
       disabled={isSubmitting || !model}
       // h-12/px-4 below sm: the full h-16 desktop button ate a third of the
       // narrow fixed bottom bar's width and made the settings row wrap far
@@ -924,6 +964,7 @@ export function PromptComposer({
         </div>
         {promptEditorModal}
         {referencePickerModal}
+        {repeatWarningModal}
       </div>
     );
   }

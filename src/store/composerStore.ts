@@ -164,6 +164,33 @@ interface ComposerState extends ComposerSlice {
   setActivePreset: (preset: ActivePreset | null) => void;
   setSubmitting: (v: boolean) => void;
   resetAfterSubmit: () => void;
+
+  /**
+   * How many times each exact (model + prompt + references) combination has
+   * been submitted, keyed by `generationSignature`. Drives the "you keep
+   * regenerating the same thing" nudge in PromptComposer — persisted so the
+   * count survives a refresh, and pruned to a bounded size so it can't grow
+   * unbounded in localStorage.
+   */
+  repeatCounts: Record<string, number>;
+  /** Records one submission of the given signature, returning the new count (post-increment). */
+  noteGeneration: (signature: string) => number;
+}
+
+const MAX_REPEAT_KEYS = 40;
+
+/**
+ * Stable key for "the exact same generation": same model, same prompt (trimmed),
+ * same set of reference URLs (order-independent). Intentionally ignores
+ * settings like aspect ratio — the nudge is about repeating the same core
+ * request, per the feature spec ("same prompt and references and same model").
+ */
+export function generationSignature(modelId: string, prompt: string, referenceUrls: string[]): string {
+  return JSON.stringify({
+    m: modelId,
+    p: prompt.trim(),
+    r: [...referenceUrls].sort(),
+  });
 }
 
 export const useComposerStore = create<ComposerState>()(
@@ -244,6 +271,21 @@ export const useComposerStore = create<ComposerState>()(
 
       resetAfterSubmit: () =>
         set({ prompt: "", references: [], startFrame: null, endFrame: null, videoReference: null, videoReferences: [], audioReferences: [] }),
+
+      repeatCounts: {},
+      noteGeneration: (signature) => {
+        const counts = get().repeatCounts;
+        const next = (counts[signature] ?? 0) + 1;
+        let updated = { ...counts, [signature]: next };
+        // Bound the map: once it's too big, keep only this signature and drop
+        // the rest. Crude but fine — stale keys are the oldest, least-relevant
+        // combos and losing a count just resets a would-be nudge.
+        if (Object.keys(updated).length > MAX_REPEAT_KEYS) {
+          updated = { [signature]: next };
+        }
+        set({ repeatCounts: updated });
+        return next;
+      },
     }),
     {
       // Everything the user set up survives a refresh — prompt, model,
@@ -255,6 +297,7 @@ export const useComposerStore = create<ComposerState>()(
       partialize: (state) => ({
         category: state.category,
         projectId: state.projectId,
+        repeatCounts: state.repeatCounts,
         _byCategory: {
           ...state._byCategory,
           [state.category]: {
