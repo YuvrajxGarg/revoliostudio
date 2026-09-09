@@ -982,6 +982,58 @@ export const MODELS: ModelConfig[] = [
     popular: true,
     tagline: "More from the muapi catalog",
   },
+  // ── GPT Image 2.5 family (OpenAI, announced 2026-09-08) ──────────────────
+  // Three t2i tiers, all confirmed live against muapi's authenticated
+  // /models/{slug} schema + /estimate-cost (2026-09-09):
+  //   • Flare    — OpenAI's DEFAULT 2.5 tier (fast). endpoint schema = 200.
+  //   • Sunburst — slower, higher-precision tier. endpoint schema = 200.
+  //   • gpt-image-2.5 (plain) — a router that defaults to Flare; FLAT $0.09.
+  //     Its GET /models/ schema 404s (playground-only alias), but submit +
+  //     estimate-cost work, so generate.ts's schema probe just falls back to
+  //     this static config (no live resolution dropdown) — see the try/catch
+  //     in generate.ts and app/api/models/[id]/schema/route.ts.
+  // Shared input schema (Flare/Sunburst): prompt, aspect_ratio (13 values
+  // incl. auto/21:9/27:16/16:27/9:8/8:9 — surfaced live in the composer),
+  // resolution (1K/2K/4K, default 2K). NO batch/num_images field and NO mask
+  // field on any of them, so supportsNumImages/supportsMask stay unset.
+  {
+    id: "gpt-image-2.5-flare",
+    recommended: true,
+    label: "GPT Image 2.5 Flare",
+    provider: "OpenAI",
+    category: "image",
+    mode: "t2i",
+    endpoint: "gpt-image-2.5-flare-text-to-image",
+    maxReferences: 0,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    popular: true,
+    tagline: "OpenAI's newest — sharper detail, richer textures, up to 4K",
+  },
+  {
+    id: "gpt-image-2.5-sunburst",
+    label: "GPT Image 2.5 Sunburst",
+    provider: "OpenAI",
+    category: "image",
+    mode: "t2i",
+    endpoint: "gpt-image-2.5-sunburst-text-to-image",
+    maxReferences: 0,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    tagline: "Slower, higher-precision GPT Image 2.5 tier",
+  },
+  {
+    id: "gpt-image-2.5",
+    label: "GPT Image 2.5",
+    provider: "OpenAI",
+    category: "image",
+    mode: "t2i",
+    endpoint: "gpt-image-2.5-text-to-image",
+    maxReferences: 0,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    tagline: "GPT Image 2.5 at a flat price — auto-tuned (Flare) tier",
+  },
   {
     id: "imagen4",
     label: "Imagen 4",
@@ -1395,6 +1447,56 @@ export const MODELS: ModelConfig[] = [
     // believed-but-unverified; see the Inpaint doc comment in generate.ts).
     supportsMask: true,
     tagline: "More from the muapi catalog",
+  },
+  // ── GPT Image 2.5 family — edit / reference-guided (see t2i block) ───────
+  // i2i schema (Flare/Sunburst, confirmed live): prompt, images_list (array,
+  // "up to 16 images"), aspect_ratio (13 values), resolution (1K/2K/4K).
+  // muapi's schema exposes NO mask field for any 2.5 edit tier (unlike
+  // gpt-image-2-edit, whose mask support is separately evidenced), so none of
+  // these set supportsMask — they stay out of the Inpaint picker until/unless
+  // a real mask field is confirmed. maxReferences capped at 4 to match the
+  // rest of the catalog (schema allows up to 16). The plain "gpt-image-2.5"
+  // edit slug 404s on schema GET like its t2i sibling; submit works and the
+  // probe falls back to this static config.
+  {
+    id: "gpt-image-2.5-flare-edit",
+    label: "GPT Image 2.5 Flare Edit",
+    provider: "OpenAI",
+    category: "image",
+    mode: "i2i",
+    endpoint: "gpt-image-2.5-flare-image-to-image",
+    imageInputKey: "images_list",
+    maxReferences: 4,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    popular: true,
+    tagline: "Precision edits with GPT Image 2.5 — changes only what you ask",
+  },
+  {
+    id: "gpt-image-2.5-sunburst-edit",
+    label: "GPT Image 2.5 Sunburst Edit",
+    provider: "OpenAI",
+    category: "image",
+    mode: "i2i",
+    endpoint: "gpt-image-2.5-sunburst-image-to-image",
+    imageInputKey: "images_list",
+    maxReferences: 4,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    tagline: "Slower, highest-precision GPT Image 2.5 edits, up to 4K",
+  },
+  {
+    id: "gpt-image-2.5-edit",
+    label: "GPT Image 2.5 Edit",
+    provider: "OpenAI",
+    category: "image",
+    mode: "i2i",
+    endpoint: "gpt-image-2.5-image-to-image",
+    imageInputKey: "images_list",
+    maxReferences: 4,
+    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    defaultAspectRatio: "1:1",
+    tagline: "GPT Image 2.5 reference-guided edits at a flat price",
   },
   {
     id: "seededit",
@@ -3367,6 +3469,9 @@ export const EDIT_COUNTERPART: Record<string, string> = {
   "flux-2-pro": "flux-2-pro-edit",
   "gpt4o-image": "gpt4o-edit",
   "gpt-image-2": "gpt-image-2-edit",
+  "gpt-image-2.5-flare": "gpt-image-2.5-flare-edit",
+  "gpt-image-2.5-sunburst": "gpt-image-2.5-sunburst-edit",
+  "gpt-image-2.5": "gpt-image-2.5-edit",
   "midjourney-v7": "midjourney-edit",
   "qwen-image": "qwen-edit",
   "qwen-image-2": "qwen-edit-plus",

@@ -158,6 +158,14 @@ const IMAGE_FLAT_COST_USD: Record<string, number> = {
   // dimension.
   "gpt4o-image": 0.04,
   "gpt-image-2": 0.09,
+  // GPT Image 2.5 (OpenAI, 2026-09-08). Flare/Sunburst are the DEFAULT (2K)
+  // tier of a real resolution ladder — see IMAGE_RESOLUTION_FLAT_COST_USD.
+  // All confirmed live via muapi's authenticated /estimate-cost (2026-09-09).
+  "gpt-image-2.5-flare": 0.1,
+  "gpt-image-2.5-sunburst": 0.1,
+  // Plain gpt-image-2.5 is FLAT $0.09 (dynamic_pricing:false) at every
+  // resolution, so it has no ladder entry below.
+  "gpt-image-2.5": 0.09,
   "imagen4": 0.03,
   "imagen4-ultra": 0.06,
   "midjourney-v7": 0.1,
@@ -189,6 +197,10 @@ const IMAGE_FLAT_COST_USD: Record<string, number> = {
   "flux-2-pro-edit": 0.032,
   "gpt4o-edit": 0.04,
   "gpt-image-2-edit": 0.09,
+  // GPT Image 2.5 edit tiers — same ladder/flat split as their t2i siblings.
+  "gpt-image-2.5-flare-edit": 0.1,
+  "gpt-image-2.5-sunburst-edit": 0.1,
+  "gpt-image-2.5-edit": 0.09,
   "seedream-4.5-edit": 0.05,
   "reve-edit": 0.05,
   "qwen-edit": 0.03,
@@ -379,6 +391,15 @@ const IMAGE_RESOLUTION_FLAT_COST_USD: Record<string, Record<string, number>> = {
   // shares the same "gpt-image-2-cost" cost_strategy per muapi's schema, so
   // applying the same resolution ladder here rather than leaving it flat.
   "gpt-image-2-edit": { "1K": 0.06, "2K": 0.09, "4K": 0.15, "1k": 0.06, "2k": 0.09, "4k": 0.15 },
+  // GPT Image 2.5 Flare/Sunburst — confirmed live via muapi's authenticated
+  // /estimate-cost (2026-09-09), t2i and i2i identical, both variants
+  // identical: $0.06 @ 1K, $0.10 @ 2K (default), $0.16 @ 4K. Casing covered
+  // for both "1K"/"2K"/"4K" and lowercase, matching the schema's enum. The
+  // plain "gpt-image-2.5" tier is flat ($0.09) so it stays out of this table.
+  "gpt-image-2.5-flare": { "1K": 0.06, "2K": 0.1, "4K": 0.16, "1k": 0.06, "2k": 0.1, "4k": 0.16 },
+  "gpt-image-2.5-flare-edit": { "1K": 0.06, "2K": 0.1, "4K": 0.16, "1k": 0.06, "2k": 0.1, "4k": 0.16 },
+  "gpt-image-2.5-sunburst": { "1K": 0.06, "2K": 0.1, "4K": 0.16, "1k": 0.06, "2k": 0.1, "4k": 0.16 },
+  "gpt-image-2.5-sunburst-edit": { "1K": 0.06, "2K": 0.1, "4K": 0.16, "1k": 0.06, "2k": 0.1, "4k": 0.16 },
 };
 
 // Real FLAT per-generation video costs — these models' live schemas expose
