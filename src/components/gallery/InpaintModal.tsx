@@ -1,31 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Brush, Eraser, Loader2, Plus, Redo2, Trash2, Undo2, X } from "lucide-react";
+import { Brush, Eraser, Loader2, Redo2, Trash2, Undo2, X } from "lucide-react";
 import { getModel } from "@/lib/models";
-import { Dropdown } from "@/components/ui/Dropdown";
 import { formatCostUSD, estimateCostUSD } from "@/lib/pricing";
 import { formatErrorMessage } from "@/lib/errorFormat";
 import { uploadReferenceFile } from "@/lib/upload";
 
-// The 3 models this was built and requested against — see the `supportsMask`
-// doc comment on ModelConfig for why generate.ts still re-verifies against
-// each model's real live schema at submit time rather than trusting this
-// list blind. Nano Banana 2 Edit first: it's our own `recommended` default
-// everywhere else, so keeping it first here too means the default selection
-// is consistent with the rest of the app.
-const INPAINT_MODEL_IDS = ["nano-banana-2-edit", "nano-banana-pro-edit", "gpt-image-2-edit"];
+// MuAPI documents gpt4o-edit as a masked edit endpoint with image_url and
+// mask_image_url. The other edit models do not accept a mask.
+const INPAINT_MODEL = getModel("gpt4o-edit");
 
 const BRUSH_COLOR = "236, 72, 153"; // pink-500 — reads clearly over any photo content, light or dark
 const MIN_PAINTED_ALPHA = 10;
-
-function ModelAvatar({ label }: { label: string }) {
-  return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 border border-border-subtle text-[10px] font-semibold">
-      {label.charAt(0).toUpperCase()}
-    </span>
-  );
-}
 
 /** Reads back the visible (colored, translucent) paint canvas and produces a
  * plain black/white PNG blob at the canvas's native pixel size — white where
@@ -68,10 +55,7 @@ function canvasHasPaint(canvas: HTMLCanvasElement): boolean {
  *
  * Mechanically this is a normal edit-model submission (same /api/generate/
  * image route every other tool uses) with one extra field: a black/white
- * mask PNG uploaded alongside the source image. See generate.ts's
- * MASK_CANDIDATES comment for how the real mask field name is resolved per
- * model, and models.ts's `supportsMask` doc comment for which models this
- * is wired to.
+ * mask PNG uploaded alongside the source image.
  */
 export function InpaintModal({
   imageUrl,
@@ -84,9 +68,7 @@ export function InpaintModal({
   onClose: () => void;
   onSubmitted: () => void;
 }) {
-  const models = INPAINT_MODEL_IDS.map((id) => getModel(id)).filter((m): m is NonNullable<typeof m> => !!m);
-  const [modelId, setModelId] = useState(models[0]?.id ?? "");
-  const model = models.find((m) => m.id === modelId) ?? models[0];
+  const model = INPAINT_MODEL;
 
   const [prompt, setPrompt] = useState("");
   const [tool, setTool] = useState<"brush" | "eraser">("brush");
@@ -94,9 +76,6 @@ export function InpaintModal({
   const [hasPaint, setHasPaint] = useState(false);
   const [historyStack, setHistoryStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
-
-  const [secondaryRefUrl, setSecondaryRefUrl] = useState<string | null>(null);
-  const [uploadingRef, setUploadingRef] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,19 +194,6 @@ export function InpaintModal({
     if (canvas) setHasPaint(canvasHasPaint(canvas));
   }
 
-  async function handleUploadSecondaryRef(file: File) {
-    setUploadingRef(true);
-    setError(null);
-    try {
-      const { url } = await uploadReferenceFile(file);
-      setSecondaryRefUrl(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload image — check your connection and try again");
-    } finally {
-      setUploadingRef(false);
-    }
-  }
-
   async function handleSubmit() {
     const canvas = canvasRef.current;
     if (!model || !canvas || submitting) return;
@@ -246,17 +212,17 @@ export function InpaintModal({
       const maskFile = new File([maskBlob], "mask.png", { type: "image/png" });
       const { url: maskUrl } = await uploadReferenceFile(maskFile);
 
-      const references = [imageUrl, ...(secondaryRefUrl ? [secondaryRefUrl] : [])];
-
       const res = await fetch("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           modelId: model.id,
           prompt: prompt.trim(),
-          references,
+          references: [imageUrl],
           maskUrl,
-          settings: {},
+          settings: {
+            aspectRatio: canvas.width > canvas.height ? "3:2" : canvas.width < canvas.height ? "2:3" : "1:1",
+          },
           projectId: projectId ?? null,
         }),
       });
@@ -376,56 +342,22 @@ export function InpaintModal({
 
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">Model</div>
-          {model && (
-            <Dropdown
-              value={model.id}
-              options={models.map((m) => ({ value: m.id, label: m.label }))}
-              onChange={setModelId}
-              icon={<ModelAvatar label={model.label} />}
-              fullWidth
-            />
-          )}
+          <div className="rounded-lg border border-border-subtle bg-surface-2 px-3 py-2 text-xs">
+            {model?.label ?? "Masked editing unavailable"}
+          </div>
         </div>
 
-        <div className="flex items-end gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
-              Describe the change
-            </div>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={'e.g. "replace with a red leather handbag" or "remove this object"…'}
-              rows={2}
-              className="w-full resize-none rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-2 text-xs text-foreground placeholder:text-muted outline-none"
-            />
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
+            Describe the change
           </div>
-          <label
-            title="Add an optional reference image (e.g. a product to insert)"
-            className="shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-surface-2 px-3 py-2 text-xs font-medium cursor-pointer hover:bg-border-subtle transition-colors"
-          >
-            {uploadingRef ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-            {secondaryRefUrl ? "Reference added" : "Add reference"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleUploadSecondaryRef(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
-          {secondaryRefUrl && (
-            <button
-              onClick={() => setSecondaryRefUrl(null)}
-              title="Remove reference"
-              className="shrink-0 icon-btn-round"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={'e.g. "replace with a red leather handbag" or "remove this object"…'}
+            rows={2}
+            className="w-full resize-none rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-2 text-xs text-foreground placeholder:text-muted outline-none"
+          />
         </div>
 
         {error && <div className="text-xs text-danger-text">{formatErrorMessage(error).message}</div>}

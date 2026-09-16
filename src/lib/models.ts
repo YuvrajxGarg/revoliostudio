@@ -152,12 +152,9 @@ export interface ModelConfig {
    */
   externalProvider?: "photoroom";
   /**
-   * True for edit models confirmed (or believed, pending live verification —
-   * see the "Inpaint" doc comment on GenerateBody in generate.ts) to accept
-   * an optional mask image alongside the source image, restricting the edit
-   * to the painted region. Gates which models Inpaint's model picker offers
-   * — generate.ts still probes the model's real live schema at submit time
-   * to find the actual field name rather than guessing one blind.
+   * True only for edit endpoints documented to accept a mask image alongside
+   * the source image. The generation handler verifies the mask field before
+   * submitting a job.
    */
   supportsMask?: boolean;
   tagline: string;
@@ -228,7 +225,6 @@ export const MODELS: ModelConfig[] = [
     supportsNumImages: true,
     maxNumImages: 4,
     popular: true,
-    supportsMask: true,
     tagline: "Edit or remix using up to 4 reference images",
   },
   {
@@ -246,7 +242,6 @@ export const MODELS: ModelConfig[] = [
     supportsNumImages: true,
     maxNumImages: 4,
     popular: true,
-    supportsMask: true,
     tagline: "Fast reference-guided image edits",
   },
   {
@@ -1418,10 +1413,11 @@ export const MODELS: ModelConfig[] = [
     endpoint: "gpt4o-edit",
     imageInputKey: "image_url",
     maxReferences: 1,
-    aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    aspectRatios: ["1:1", "2:3", "3:2"],
     defaultAspectRatio: "1:1",
     supportsNumImages: true,
     maxNumImages: 4,
+    supportsMask: true,
     tagline: "More from the muapi catalog",
   },
   {
@@ -1441,11 +1437,6 @@ export const MODELS: ModelConfig[] = [
     supportsNumImages: true,
     maxNumImages: 4,
     popular: true,
-    // OpenAI's own Images API natively documents a "mask" edit parameter —
-    // of the 3 models wired for Inpaint, this is the one with the strongest
-    // independent evidence of real mask support (the Nano Banana pair are
-    // believed-but-unverified; see the Inpaint doc comment in generate.ts).
-    supportsMask: true,
     tagline: "More from the muapi catalog",
   },
   // ── GPT Image 2.5 family — edit / reference-guided (see t2i block) ───────

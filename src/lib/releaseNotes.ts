@@ -297,8 +297,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     tag: "New",
     highlights: [
       "Hover any completed image generation and hit the brush icon to open Inpaint: paint over the region you want to change, describe the replacement, and everything outside the painted area stays untouched.",
-      "Works with Nano Banana 2 Edit, Nano Banana Pro Edit, and GPT Image 2 Edit — pick the model right in the Inpaint panel.",
-      "Optionally attach a second reference image (e.g. a product photo) to drop directly into the painted area instead of describing it from scratch.",
+      "Uses GPT-4o Edit, the masked image editing model, to target the painted area.",
     ],
   },
   {

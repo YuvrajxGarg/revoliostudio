@@ -65,18 +65,9 @@ const RESOLUTION_CANDIDATES = [
 // modes, which already have their own dedicated (and required) video field
 // handled separately below.
 const VIDEO_REF_CANDIDATES = ["video_url", "reference_video_url", "source_video_url", "input_video", "video"];
-// Inpaint: candidate live-schema field names for a mask image on a
-// `supportsMask` edit model. muapi doesn't publish a browsable catalog we
-// can grep ahead of time and this sandbox's network can't reach api.muapi.ai
-// directly to confirm live (see higgsfield-apps-research.md's inpaint
-// discussion), so — same defensive posture as every other *_CANDIDATES list
-// here — this probes several plausible names against the model's real
-// schema at submit time and only sends the mask under whichever one
-// actually exists, rather than guessing blind. "mask_url" is listed first
-// as the best-guess default (matches this codebase's own "*_url" naming
-// convention for every other image field — image_url, images_list,
-// reference_video_url).
-const MASK_CANDIDATES = ["mask_url", "mask_image_url", "image_mask_url", "mask"];
+// GPT-4o Edit's documented mask field is mask_image_url. Probe the live
+// schema first, while retaining that documented field if the probe fails.
+const MASK_CANDIDATES = ["mask_image_url", "mask_url", "image_mask_url", "mask"];
 
 interface GenerateBody {
   modelId: string;
@@ -489,7 +480,9 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   // (caught by handleGenerateRequest, surfaced as a real error) is
   // deliberately louder than this file's usual "omit and move on" pattern.
   if (body.maskUrl) {
-    const maskFieldName = liveProps ? MASK_CANDIDATES.find((key) => liveProps![key]) : null;
+    const maskFieldName =
+      (liveProps ? MASK_CANDIDATES.find((key) => liveProps![key]) : null) ??
+      (model.id === "gpt4o-edit" ? "mask_image_url" : null);
     if (!maskFieldName) {
       throw new Error(
         `${model.label}'s live schema didn't expose a recognized mask field (checked: ${MASK_CANDIDATES.join(", ")}) — inpainting isn't confirmed working on this model yet.`
@@ -586,9 +579,12 @@ export async function handleGenerateRequest(category: Category, request: Request
   // an unsupported model before wasting a DB insert or a muapi round-trip.
   if (body.maskUrl && !model.supportsMask) {
     return NextResponse.json(
-      { error: `${model.label} doesn't support masked inpainting — try Nano Banana 2 Edit, Nano Banana Pro Edit, or GPT Image 2 Edit.` },
+      { error: `${model.label} doesn't support masked inpainting. Use GPT-4o Edit.` },
       { status: 400 }
     );
+  }
+  if (body.maskUrl && !body.references?.[0]) {
+    return NextResponse.json({ error: "A source image is required for inpainting." }, { status: 400 });
   }
 
   // externalProvider models (currently just Photoroom's background remover)
