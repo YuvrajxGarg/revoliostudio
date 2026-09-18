@@ -221,7 +221,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       // "images_list" with a maxItems constraint — this is the ground truth
       // for how many reference images a model actually accepts, which can
       // differ from (and correct) our static registry's maxReferences.
-      maxReferenceImages: (props.images_list?.maxItems as number) ?? null,
+      maxReferenceImages: (props[model.imageInputKey ?? "images_list"]?.maxItems as number) ?? null,
       styleField: styleFieldName,
       lyricsField: lyricsFieldName,
       instrumentalField: instrumentalFieldName,
@@ -239,7 +239,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       hasDurationField: !!durationField,
       hasAspectRatioField,
       videoListField: videoListFieldName
-        ? { field: videoListFieldName, max: (props[videoListFieldName]?.maxItems as number) ?? 3 }
+        ? { field: videoListFieldName, max: (props[videoListFieldName]?.maxItems as number) ?? model.maxVideoReferences ?? 3 }
         : null,
       audioRefField: audioRefFieldName
         ? {

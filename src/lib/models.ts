@@ -8,6 +8,8 @@
  * read from this registry.
  */
 
+import { NEW_MUAPI_MODELS } from "./new-muapi-models";
+
 export type Category = "image" | "video" | "3d" | "audio";
 export type Mode =
   | "t2i"
@@ -23,7 +25,7 @@ export type Mode =
   | "motion"
   /** Text-to-audio — full songs (Suno) or short sound effects / Foley (MMAudio). */
   | "t2a";
-export type ImageInputKey = "image_url" | "images_list";
+export type ImageInputKey = "image_url" | "images_list" | "reference_images";
 
 export interface ModelConfig {
   id: string;
@@ -32,6 +34,8 @@ export interface ModelConfig {
   category: Category;
   mode: Mode;
   endpoint: string;
+  /** MuAPI catalog's base USD cost; dynamic variants can cost more for longer or larger output. */
+  catalogBaseCostUsd?: number;
   /**
    * Override for the actual job-submission POST endpoint, when it differs
    * from `endpoint` (which doubles as the GET /models/{slug} catalog/schema
@@ -51,6 +55,11 @@ export interface ModelConfig {
   imageInputKey?: ImageInputKey;
   /** Max number of reference images this endpoint accepts. */
   maxReferences: number;
+  requiresReferenceInput?: boolean;
+  /** Limit across image and video reference arrays when the provider imposes a shared cap. */
+  maxCombinedReferences?: number;
+  /** Fallback cap for secondary reference videos when the schema omits maxItems. */
+  maxVideoReferences?: number;
   /** Supports a distinct start-frame + end-frame pair (video only). */
   supportsStartEndFrame?: boolean;
   /**
@@ -1445,8 +1454,8 @@ export const MODELS: ModelConfig[] = [
   // muapi's schema exposes NO mask field for any 2.5 edit tier (unlike
   // gpt-image-2-edit, whose mask support is separately evidenced), so none of
   // these set supportsMask — they stay out of the Inpaint picker until/unless
-  // a real mask field is confirmed. maxReferences capped at 4 to match the
-  // rest of the catalog (schema allows up to 16). The plain "gpt-image-2.5"
+  // a real mask field is confirmed. Flare and Sunburst accept up to 16
+  // reference images. The plain "gpt-image-2.5"
   // edit slug 404s on schema GET like its t2i sibling; submit works and the
   // probe falls back to this static config.
   {
@@ -1457,7 +1466,8 @@ export const MODELS: ModelConfig[] = [
     mode: "i2i",
     endpoint: "gpt-image-2.5-flare-image-to-image",
     imageInputKey: "images_list",
-    maxReferences: 4,
+    maxReferences: 16,
+    requiresReferenceInput: true,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
     popular: true,
@@ -1471,7 +1481,8 @@ export const MODELS: ModelConfig[] = [
     mode: "i2i",
     endpoint: "gpt-image-2.5-sunburst-image-to-image",
     imageInputKey: "images_list",
-    maxReferences: 4,
+    maxReferences: 16,
+    requiresReferenceInput: true,
     aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     defaultAspectRatio: "1:1",
     tagline: "Slower, highest-precision GPT Image 2.5 edits, up to 4K",
@@ -3401,6 +3412,7 @@ export const MODELS: ModelConfig[] = [
     badge: "New",
     tagline: "A second 3D provider alongside Meshy",
   },
+  ...NEW_MUAPI_MODELS,
 ];
 
 export function getModel(id: string): ModelConfig | undefined {
@@ -3434,8 +3446,9 @@ export const DEFAULT_MODEL_ID: Partial<Record<Category, string>> = {
  */
 export const EDIT_COUNTERPART: Record<string, string> = {
   "flux-3": "flux-3-edit",
-  "qwen3-image": "qwen-image-2-edit",
+  "qwen3-image": "qwen3-image-edit",
   "flux-kontext-pro": "flux-kontext-pro-edit",
+  "flux-kontext-dev": "flux-kontext-dev-edit",
   "ltx-2.3-t2v": "ltx-2.3-i2v",
   "kling-o1-t2v": "kling-o1-i2v",
   "kling-v3-turbo-std-t2v": "kling-v3-turbo-pro-i2v",
@@ -3463,6 +3476,12 @@ export const EDIT_COUNTERPART: Record<string, string> = {
   "gpt-image-2.5-flare": "gpt-image-2.5-flare-edit",
   "gpt-image-2.5-sunburst": "gpt-image-2.5-sunburst-edit",
   "gpt-image-2.5": "gpt-image-2.5-edit",
+  "muse-image": "muse-image-edit",
+  "happy-horse-1-t2v": "happy-horse-1-i2v",
+  "happy-horse-1.1-t2v": "happy-horse-1.1-i2v",
+  "minimax-h3-max-t2v": "minimax-h3-max-i2v",
+  "minimax-h3-max-turbo-t2v": "minimax-h3-max-turbo-i2v",
+  "ltx-2.5-t2v": "ltx-2.5-i2v",
   "midjourney-v7": "midjourney-edit",
   "qwen-image": "qwen-edit",
   "qwen-image-2": "qwen-edit-plus",

@@ -52,6 +52,7 @@ export const EXTRA_BOOLEAN_FIELDS: ExtraFieldDef[] = [
  */
 export const EXTRA_ENUM_FIELDS: ExtraFieldDef[] = [
   { field: "quality", label: "Quality" }, // gpt-image-2 (+edit) low/medium/high
+  { field: "prompt_expansion_mode", label: "Prompt expansion" }, // MiniMax H3 Max
   { field: "output_format", label: "File format" }, // nano-banana-2, qwen3-image
   { field: "style", label: "Style" }, // ideogram-v3, pixverse-v6-transition
   { field: "render_speed", label: "Render speed" }, // ideogram-v3 / reframe
@@ -93,7 +94,7 @@ export const NEGATIVE_PROMPT_CANDIDATES = ["negative_prompt", "negative_tags"];
  * single optional video string. Never matched against a v2v model's own
  * primary video field (the caller excludes `model.videoFieldName`).
  */
-export const VIDEO_LIST_CANDIDATES = ["videos_list", "video_files"];
+export const VIDEO_LIST_CANDIDATES = ["videos_list", "video_files", "reference_videos"];
 
 /**
  * Candidate field names for an audio-reference input — a single URL string
@@ -101,4 +102,4 @@ export const VIDEO_LIST_CANDIDATES = ["videos_list", "video_files"];
  * `audios_list`, Seedance 2.0 Omni / Video Edit's `audio_files`). Unrelated
  * to AUDIO_CANDIDATES, which cover the boolean generate-audio toggle.
  */
-export const AUDIO_REF_CANDIDATES = ["audio_url", "audios_list", "audio_files"];
+export const AUDIO_REF_CANDIDATES = ["audio_url", "audios_list", "audio_files", "reference_audios"];

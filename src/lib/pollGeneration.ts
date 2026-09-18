@@ -6,7 +6,29 @@ import type { Generation } from "@/lib/types";
 // resolution from muapi (including cases where muapi's poll endpoint keeps
 // erroring, e.g. a content-policy rejection that never resolves to a clean
 // {status:"failed"} body), stop polling forever and surface it as failed.
-const STALE_TIMEOUT_MS = 8 * 60 * 1000;
+//
+// The ceiling is per-category because completion times differ by an order of
+// magnitude across model families: image/audio jobs are done in seconds-to-a-
+// couple-minutes, but video (Seedance/Kling/etc.) and 3D (Meshy) routinely run
+// well past 8 minutes on muapi — especially image-to-video and higher-res
+// tiers. A single 8-minute global ceiling was force-failing video/3D jobs that
+// muapi was still legitimately "processing", which is what surfaced as
+// `Timed out waiting for muapi (still "processing" after 8 min)`.
+const STALE_TIMEOUT_MS_BY_CATEGORY: Record<string, number> = {
+  image: 8 * 60 * 1000,
+  audio: 8 * 60 * 1000,
+  video: 30 * 60 * 1000,
+  "3d": 30 * 60 * 1000,
+};
+// Fallback for rows with an unexpected/missing category.
+const DEFAULT_STALE_TIMEOUT_MS = 30 * 60 * 1000;
+
+function staleTimeoutMs(category: unknown): number {
+  if (typeof category === "string" && category in STALE_TIMEOUT_MS_BY_CATEGORY) {
+    return STALE_TIMEOUT_MS_BY_CATEGORY[category];
+  }
+  return DEFAULT_STALE_TIMEOUT_MS;
+}
 
 /**
  * Poll muapi for one generation row's current status and persist any change
@@ -35,9 +57,10 @@ export async function pollGenerationStatus(
   }
 
   const ageMs = Date.now() - new Date(row.created_at).getTime();
+  const staleMs = staleTimeoutMs(row.category);
 
   if (!row.request_id) {
-    if (ageMs > STALE_TIMEOUT_MS) {
+    if (ageMs > staleMs) {
       const { data: updated } = await supabase
         .from("generations")
         .update({ status: "failed", error: "muapi never returned a request id for this job." })
@@ -83,7 +106,7 @@ export async function pollGenerationStatus(
       return (updated ?? row) as Generation;
     }
 
-    if (ageMs > STALE_TIMEOUT_MS) {
+    if (ageMs > staleMs) {
       const { data: updated } = await supabase
         .from("generations")
         .update({
@@ -102,7 +125,7 @@ export async function pollGenerationStatus(
     const status = err instanceof MuapiError ? err.status : 0;
     const isPermanent = status >= 400 && status < 500;
 
-    if (isPermanent || ageMs > STALE_TIMEOUT_MS) {
+    if (isPermanent || ageMs > staleMs) {
       const { data: updated } = await supabase
         .from("generations")
         .update({ status: "failed", error: message })

@@ -50,6 +50,8 @@ export function EditVideoComposer({
   const [elementsUploading, setElementsUploading] = useState(false);
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [aspectRatio, setAspectRatio] = useState(model?.defaultAspectRatio ?? "16:9");
+  const [resolution, setResolution] = useState<string | undefined>();
+  const [generateAudio, setGenerateAudio] = useState<boolean | undefined>();
   // Generic live-schema extras (see src/lib/extra-params.ts) — this composer
   // doesn't use the shared composer store, so they live in local state and
   // reset on model switch. This is how wan2.7-video-edit's negative_prompt +
@@ -97,6 +99,8 @@ export function EditVideoComposer({
     setNegativePrompt("");
     setSeed(undefined);
     setDuration(undefined);
+    setResolution(undefined);
+    setGenerateAudio(undefined);
     setAudioRefs([]);
   }, [modelId]);
 
@@ -113,7 +117,10 @@ export function EditVideoComposer({
 
   // Per-second models (the whole Seedance 2.5 Video Edit family) need the
   // selected duration or the button shows the 5s price for a 30s clip.
-  const estimatedCostUSD = model ? estimateCostUSD(model, { duration: currentDuration }) : 0;
+  const estimatedCostUSD = model ? estimateCostUSD(model, {
+    duration: currentDuration,
+    resolution: resolution ?? (schemaOk ? schema.defaultResolution ?? undefined : undefined),
+  }) : 0;
 
   async function handleVideoUpload(file: File) {
     setVideoUploading(true);
@@ -181,6 +188,8 @@ export function EditVideoComposer({
           settings: {
             aspectRatio,
             duration: currentDuration,
+            resolution: resolution ?? (schemaOk ? schema.defaultResolution ?? undefined : undefined),
+            generateAudio: generateAudio ?? (schemaOk ? schema.defaultAudio ?? undefined : undefined),
             keepOriginalSound: keepSound,
             seed,
             negativePrompt: negativePrompt.trim() || undefined,
@@ -313,15 +322,27 @@ export function EditVideoComposer({
       )}
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Dropdown
-          value={aspectRatio}
-          onChange={setAspectRatio}
-          options={(model?.aspectRatios ?? ["16:9", "9:16", "1:1"]).map((ar) => ({
-            value: ar,
-            label: ar,
-            icon: <AspectRatioIcon ratio={ar} />,
-          }))}
-        />
+        {(!schemaOk || schema.aspectRatios?.length) && (
+          <Dropdown
+            value={schemaOk && schema.aspectRatios && !schema.aspectRatios.includes(aspectRatio)
+              ? schema.defaultAspectRatio ?? schema.aspectRatios[0]
+              : aspectRatio}
+            onChange={setAspectRatio}
+            options={(schemaOk ? schema.aspectRatios ?? [] : model?.aspectRatios ?? ["16:9", "9:16", "1:1"]).map((ar) => ({
+              value: ar,
+              label: ar,
+              icon: <AspectRatioIcon ratio={ar} />,
+            }))}
+          />
+        )}
+        {schemaOk && schema.resolutions && schema.resolutions.length > 0 && (
+          <Dropdown
+            value={resolution && schema.resolutions.includes(resolution) ? resolution : schema.defaultResolution ?? schema.resolutions[0]}
+            onChange={setResolution}
+            options={schema.resolutions.map((value) => ({ value, label: value }))}
+            panelTitle={schema.resolutionField === "quality" ? "Quality" : "Resolution"}
+          />
+        )}
         {durationSlider ? (
           <div className="control-pill">
             <input
@@ -347,6 +368,12 @@ export function EditVideoComposer({
           )
         )}
       </div>
+      {schemaOk && schema.audioField && (
+        <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface-2 px-3 py-2">
+          <span className="text-sm">Generate audio</span>
+          <Toggle checked={generateAudio ?? schema.defaultAudio ?? true} onChange={setGenerateAudio} />
+        </div>
+      )}
 
       {/* Generic live-schema extras — see the extraParams state above. */}
       <div className="flex flex-wrap items-center gap-2 empty:hidden">

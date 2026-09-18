@@ -195,7 +195,7 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   const needsSchema =
     model.supportsNumImages ||
     settings.generateAudio !== undefined ||
-    model.imageInputKey === "images_list" ||
+    model.imageInputKey === "images_list" || model.imageInputKey === "reference_images" ||
     !!settings.resolution ||
     model.mode === "t2a" ||
     wantsOptionalVideoRef ||
@@ -382,7 +382,7 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
   // Real max reference-image count from the live "images_list" schema
   // field, when we probed it — falls back to the static registry value if
   // the probe failed or this model doesn't use images_list at all.
-  const referenceCap = liveProps?.images_list?.maxItems ?? model.maxReferences;
+  const referenceCap = liveProps?.[model.imageInputKey ?? "images_list"]?.maxItems ?? model.maxReferences;
 
   // Motion Control (e.g. Runway Act-Two, Wan Animate): character image + a
   // separate reference/motion video — a genuinely two-input shape, handled
@@ -466,6 +466,8 @@ async function buildPayload(model: ModelConfig, body: GenerateBody): Promise<Rec
     payload.images_list = frames;
   } else if (model.imageInputKey === "images_list") {
     payload.images_list = (body.references ?? []).slice(0, referenceCap);
+  } else if (model.imageInputKey === "reference_images") {
+    payload.reference_images = (body.references ?? []).slice(0, referenceCap);
   } else if (model.imageInputKey === "image_url") {
     const url = body.references?.[0] || body.startFrameUrl;
     if (url) payload.image_url = url;
@@ -574,6 +576,21 @@ export async function handleGenerateRequest(category: Category, request: Request
   }
   if (model.mode === "motion" && (!body.videoUrl || !body.characterImageUrl)) {
     return NextResponse.json({ error: "Add both a motion video and a character image" }, { status: 400 });
+  }
+  if (model.maxCombinedReferences &&
+      (body.references?.length ?? 0) + (body.videoUrls?.length ?? 0) > model.maxCombinedReferences) {
+    return NextResponse.json(
+      { error: `Use at most ${model.maxCombinedReferences} combined image and video references.` },
+      { status: 400 }
+    );
+  }
+  if (model.requiresReferenceInput && !body.references?.length && !body.startFrameUrl && !body.videoUrls?.length) {
+    return NextResponse.json(
+      { error: model.mode === "v2v"
+        ? `Add at least one character image for ${model.label}.`
+        : `Add a reference image or video for ${model.label}.` },
+      { status: 400 }
+    );
   }
   // Static, registry-level check (no live schema needed) — catches picking
   // an unsupported model before wasting a DB insert or a muapi round-trip.

@@ -518,7 +518,7 @@ export function estimateCostUSD(model: ModelConfig, settings: CostEstimateSettin
     const imageResolutionRates = IMAGE_RESOLUTION_FLAT_COST_USD[model.id];
     const imageResolutionRate =
       imageResolutionRates && settings.resolution ? imageResolutionRates[settings.resolution] : undefined;
-    const per = imageResolutionRate ?? IMAGE_FLAT_COST_USD[model.id] ?? baseImageCostUSD(model);
+    const per = imageResolutionRate ?? IMAGE_FLAT_COST_USD[model.id] ?? model.catalogBaseCostUsd ?? baseImageCostUSD(model);
     const n = Math.max(1, settings.numImages || 1);
     return round3(per * n);
   }
@@ -533,7 +533,8 @@ export function estimateCostUSD(model: ModelConfig, settings: CostEstimateSettin
   const dur = settings.duration ?? model.defaultDuration ?? 5;
   const resolutionRates = VIDEO_RESOLUTION_PER_SECOND_COST_USD[model.id];
   const resolutionRate = resolutionRates && settings.resolution ? resolutionRates[settings.resolution] : undefined;
-  const perSecond = resolutionRate ?? VIDEO_PER_SECOND_COST_USD[model.id] ?? baseVideoCostPerSecondUSD(model);
+  const perSecond = resolutionRate ?? VIDEO_PER_SECOND_COST_USD[model.id] ??
+    (model.catalogBaseCostUsd != null ? model.catalogBaseCostUsd / 5 : baseVideoCostPerSecondUSD(model));
   return round3(perSecond * dur);
 }
 
