@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Category } from "@/lib/models";
+import { GuidedPrompt } from "./GuidedPrompt";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -63,6 +64,7 @@ export function PromptEditorModal({
   const [imgBusy, setImgBusy] = useState(false);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"guide" | "assistant">(category === "image" || category === "video" ? "guide" : "assistant");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const busy = sending || quickBusy !== null || imgBusy;
 
@@ -167,8 +169,19 @@ export function PromptEditorModal({
             </span>
           </div>
 
-          {/* Right: AI side panel — chat, backed by /api/prompt-assist. */}
+          {/* Right: structured guide or AI assistant. */}
           <div className="flex flex-col min-h-0">
+            <div className="flex gap-1 border-b border-border-subtle p-2 shrink-0" role="tablist" aria-label="Prompt tools">
+              {(category === "image" || category === "video" ? ["guide", "assistant"] as const : ["assistant"] as const).map((name) => (
+                <button key={name} type="button" role="tab" aria-selected={panel === name}
+                  onClick={() => setPanel(name)}
+                  className={cn("rounded-lg px-3 py-1.5 text-xs font-medium capitalize", panel === name ? "bg-surface-2 text-foreground" : "text-muted hover:text-foreground")}>{name}</button>
+              ))}
+            </div>
+            {panel === "guide" ? (
+              <div className="flex-1 overflow-y-auto"><GuidedPrompt category={category} draft={draft} onUse={setDraft} /></div>
+            ) : (
+            <>
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
               {messages.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center text-muted">
@@ -248,6 +261,8 @@ export function PromptEditorModal({
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
 

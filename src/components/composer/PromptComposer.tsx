@@ -7,7 +7,7 @@ import { Category, DEFAULT_MODEL_ID, EDIT_COUNTERPART, ModelConfig, modelsByCate
 import { cn } from "@/lib/utils";
 import { GenerateIcon } from "@/components/ui/GenerateIcon";
 import { ModelSelector } from "./ModelSelector";
-import { ReferenceTray, type ReferenceQuickPick } from "./ReferenceTray";
+import { ReferenceTray } from "./ReferenceTray";
 import { FrameSlots } from "./FrameSlots";
 import { MediaReferenceList } from "./MediaReferenceList";
 import { SettingsBar } from "./SettingsBar";
@@ -15,7 +15,7 @@ import { MentionPopover, type MentionItem } from "./MentionPopover";
 import { MentionHighlightTextarea } from "./MentionHighlightTextarea";
 import { PromptEditorModal } from "./PromptEditorModal";
 import { RepeatWarningModal } from "./RepeatWarningModal";
-import { ReferencePicker, IMAGE_CATEGORIES, TAG_CATEGORIES, type ReferencePickResult } from "./ReferencePicker";
+import { ReferencePicker, type ReferencePickResult } from "./ReferencePicker";
 import type { RefCategory } from "@/hooks/useCuratedReferences";
 import { estimateCostUSD, formatCostUSD, formatCostINR } from "@/lib/pricing";
 import { formatErrorMessage } from "@/lib/errorFormat";
@@ -23,14 +23,6 @@ import { uploadReferenceFile } from "@/lib/upload";
 import { useModelSchema } from "@/hooks/useModelSchema";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
-
-// Reuses the exact same category lists ReferencePicker's own left nav uses,
-// so adding a category there automatically shows up here too. Kept as two
-// separate lists (not one merged array) because ReferenceTray treats them
-// differently: the image categories fill in-place with the picked photo(s),
-// the tag categories always stay a plain trigger (see ReferenceTray.tsx).
-const REFERENCE_IMAGE_CATEGORIES: ReferenceQuickPick[] = IMAGE_CATEGORIES;
-const REFERENCE_TAG_CATEGORIES: ReferenceQuickPick[] = TAG_CATEGORIES;
 
 // The generation models here have no concept of "this attached image is the
 // style ref, that one's the character ref" — images_list is just a flat,
@@ -854,14 +846,10 @@ export function PromptComposer({
               // used to be the only way in, since this was gated on the
               // selected model's static maxReferences being > 0). Attaching an
               // image here still auto-upgrades to the model's reference-capable
-              // sibling via the effect above. Style/Character sit as the first
-              // two tiles in the row (same size as the "+" upload tile) and
-              // open the full Reference Library instead of a plain upload —
-              // see handleReferencePick for what a pick actually does.
+              // sibling via the effect above. Presets opens the existing
+              // Reference Library for roles and prompt tags.
               <ReferenceTray
                 max={Math.max(maxRefs || 0, references.length, 4)}
-                imageCategories={REFERENCE_IMAGE_CATEGORIES}
-                tagCategories={REFERENCE_TAG_CATEGORIES}
                 onOpenCategory={(id) => setReferencePickerCategory(id as RefCategory)}
               />
             ) : null}

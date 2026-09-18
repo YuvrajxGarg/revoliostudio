@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
-import { Plus, X, Pencil, Eye, ImageUp, Link2, Trash2, type LucideIcon } from "lucide-react";
+import { useRef, useState } from "react";
+import { Plus, X, Pencil, Eye, ImageUp, Link2, Trash2, LayoutTemplate } from "lucide-react";
 import { useComposerStore } from "@/store/composerStore";
 import type { ReferenceImage } from "@/lib/types";
 import { formatErrorMessage } from "@/lib/errorFormat";
@@ -9,13 +9,7 @@ import { uploadReferenceFile } from "@/lib/upload";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 
-export interface ReferenceQuickPick {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-}
-
-/** A single filled reference tile — the image, its rename-on-click label, and a remove button. Shared by both the per-category slot groups and the plain (uncategorized) uploads below them. */
+/** A filled reference tile with rename, remove, and optional add-more actions. */
 function RefThumb({
   item,
   editing,
@@ -40,7 +34,7 @@ function RefThumb({
   onView: () => void;
   /** Right-click on the tile — opens the actions menu (replace/view/rename/remove). */
   onContextMenu: (e: React.MouseEvent) => void;
-  /** Only set on the last tile of a category group — opens the picker to add another to this same category, rather than a separate tile taking up its own spot in the row. */
+  /** Opens the picker on the same category for another reference. */
   onAddMore?: () => void;
 }) {
   return (
@@ -106,16 +100,10 @@ function RefThumb({
 export function ReferenceTray({
   max,
   label,
-  imageCategories,
-  tagCategories,
   onOpenCategory,
 }: {
   max: number;
   label?: string;
-  /** Style/Character/Location/Element — each renders as ONE fixed-position box: an icon+label trigger when nothing's been picked for it yet, or the picked image(s) once you have — with a compact "add more" tile after so a second Character (say) lands right next to the first instead of a new row starting elsewhere. */
-  imageCategories?: ReferenceQuickPick[];
-  /** Color/Effects/Camera — pure prompt-modifier tags, so these always stay a plain icon+label trigger; there's nothing to "fill" since picking one doesn't add an image. */
-  tagCategories?: ReferenceQuickPick[];
   onOpenCategory?: (id: string) => void;
 }) {
   const { references, addReference, removeReference, renameReference, replaceReference } = useComposerStore();
@@ -208,12 +196,6 @@ export function ReferenceTray({
   return (
     <div className="flex flex-col gap-1">
       {label && <span className="px-1 text-xs text-muted">{label}</span>}
-      {/* Fixed 3-column grid, not flex-wrap or auto-fill: every tile
-          (upload, empty category, filled thumbnail, tag) sits in an equal
-          1/3-width column so rows fill the panel edge-to-edge with no dead
-          space, and stay aligned across wraps — flex-wrap (and auto-fill,
-          which reserves extra empty tracks past the last item) both left a
-          gap on the right of partially-filled rows. */}
       <div className="grid grid-cols-4 items-start justify-items-center gap-x-2 gap-y-3 px-1">
         {!atMax && (
           <button
@@ -226,64 +208,21 @@ export function ReferenceTray({
             <span className="truncate text-[10px] text-muted">Add</span>
           </button>
         )}
-
-        {imageCategories?.map((cat) => {
-          const items = references.filter((r) => r.category === cat.id);
-          if (items.length === 0) {
-            return (
-              <button
-                key={cat.id}
-                onClick={() => onOpenCategory?.(cat.id)}
-                className="flex w-16 shrink-0 flex-col items-center gap-1"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface-2 text-muted transition-colors hover:border-foreground/40 hover:text-foreground">
-                  <cat.icon className="h-4 w-4" />
-                </div>
-                <span className="truncate text-[10px] text-muted">{cat.label}</span>
-              </button>
-            );
-          }
-          return (
-            <Fragment key={cat.id}>
-              {items.map((ref, i) => (
-                <RefThumb
-                  key={ref.id}
-                  item={ref}
-                  editing={editingId === ref.id}
-                  draftName={draftName}
-                  onStartEdit={() => startEditing(ref.id, ref.name)}
-                  onDraftChange={setDraftName}
-                  onCommitEdit={commitEdit}
-                  onCancelEdit={() => setEditingId(null)}
-                  onRemove={() => removeReference(ref.id)}
-                  onView={() => setViewingUrl(ref.url)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setMenu({ x: e.clientX, y: e.clientY, ref });
-                  }}
-                  onAddMore={!atMax && i === items.length - 1 ? () => onOpenCategory?.(cat.id) : undefined}
-                />
-              ))}
-            </Fragment>
-          );
-        })}
-
-        {tagCategories?.map((cat) => (
+        {onOpenCategory && (
           <button
-            key={cat.id}
-            onClick={() => onOpenCategory?.(cat.id)}
+            type="button"
+            onClick={() => onOpenCategory("style")}
             className="flex w-16 shrink-0 flex-col items-center gap-1"
+            title="Choose a reference or prompt preset"
           >
             <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-border-subtle bg-surface-2 text-muted transition-colors hover:border-foreground/40 hover:text-foreground">
-              <cat.icon className="h-4 w-4" />
+              <LayoutTemplate className="h-4 w-4" />
             </div>
-            <span className="truncate text-[10px] text-muted">{cat.label}</span>
+            <span className="truncate text-[10px] text-muted">Presets</span>
           </button>
-        ))}
+        )}
 
-        {references
-          .filter((r) => !r.category)
-          .map((ref) => (
+        {references.map((ref, index) => (
             <RefThumb
               key={ref.id}
               item={ref}
@@ -299,6 +238,9 @@ export function ReferenceTray({
                 e.preventDefault();
                 setMenu({ x: e.clientX, y: e.clientY, ref });
               }}
+              onAddMore={!atMax && ref.category && onOpenCategory && !references.slice(index + 1).some((next) => next.category === ref.category)
+                ? () => onOpenCategory(ref.category as string)
+                : undefined}
             />
           ))}
 

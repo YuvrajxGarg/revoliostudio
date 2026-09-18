@@ -73,7 +73,12 @@ export async function randomPrompt(category: Category): Promise<string> {
 export async function autoPrompt(category: Category, draft: string): Promise<string> {
   if (!draft.trim()) return randomPrompt(category);
   const noun = CATEGORY_NOUN[category];
-  const systemInstruction = `Expand and improve the following draft into a complete, vivid prompt for ${noun} generation. Keep the user's core subject/idea intact — add helpful specificity (composition, lighting, style, mood, etc, as relevant) rather than changing what they actually asked for. Reply with ONLY the improved prompt text, no preamble, no quotes.`;
+  const categoryDirection = category === "video"
+    ? "When useful, state the opening frame, subject action in temporal order, camera movement, ending frame, lighting and sound. Keep the action feasible as one coherent shot unless the draft asks for cuts. Do not invent dialogue, duration, reference IDs, or model-specific settings."
+    : category === "image"
+      ? "When useful, clarify subject identity, setting, composition, lighting, palette, and material texture. If the draft asks for multiple views of one character, spell out the views and consistency requirements. Do not invent reference IDs or model-specific settings."
+      : "Add only details relevant to the requested result.";
+  const systemInstruction = `Expand the user's draft into a complete, usable ${noun} generation prompt. Preserve its subject, intent, constraints, and any named references. ${categoryDirection} Add specificity only where the draft supports it; do not pad with generic cinematic adjectives or make up story details. Reply with ONLY the prompt text, no preamble or quotes, under 2000 characters.`;
   return run(() => generateText({ model: DEFAULT_LLM_MODEL, systemInstruction, prompt: draft }));
 }
 
