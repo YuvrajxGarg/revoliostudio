@@ -65,7 +65,7 @@ export function RunFlowModal({ flow, onClose }: { flow: Flow; onClose: () => voi
             className="w-full resize-none rounded-lg border border-border-subtle bg-surface-2 px-2.5 py-2 text-sm outline-none placeholder:text-muted focus:border-accent"
           />
           <p className="mt-1.5 text-[11px] text-muted">
-            Runs {flow.steps.length} step{flow.steps.length === 1 ? "" : "s"} — you'll review the cost before it executes.
+            Runs {flow.steps.length} step{flow.steps.length === 1 ? "" : "s"} — you&apos;ll review the cost before it executes.
           </p>
         </div>
 

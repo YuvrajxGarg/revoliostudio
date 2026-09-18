@@ -249,7 +249,7 @@ export function ExpandModal({
 
         <div>
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
-            What's beyond the edges? (optional)
+            What&apos;s beyond the edges? (optional)
           </div>
           <textarea
             value={prompt}

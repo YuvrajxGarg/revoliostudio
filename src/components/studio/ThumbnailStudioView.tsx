@@ -431,11 +431,11 @@ export function ThumbnailStudioView() {
         {step === 1 && (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted leading-relaxed">
-              Upload a thumbnail whose look you want to build on — yours, a competitor's, anything. It gets broken
+              Upload a thumbnail whose look you want to build on — yours, a competitor&apos;s, anything. It gets broken
               down into the archetype, action, location, and styling that seed every field below, so Casting and
               Scene start from a strong, specific direction instead of a blank page. You can attach the image itself
               as a loose layout guide when rendering, or skip that and use it for the breakdown only. Skipping this
-              step entirely works too, but you'll be filling in every field by hand from scratch.
+              step entirely works too, but you&apos;ll be filling in every field by hand from scratch.
             </p>
 
             {!referenceUrl ? (

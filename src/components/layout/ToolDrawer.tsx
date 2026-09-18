@@ -116,7 +116,7 @@ export function ToolDrawer({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <p className="px-1 pb-2 text-[11px] text-muted">Pin the ones you use most — they'll show up in the sidebar.</p>
+        <p className="px-1 pb-2 text-[11px] text-muted">Pin the ones you use most — they&apos;ll show up in the sidebar.</p>
         <div className="grid grid-cols-2 gap-1.5">
           {filtered.map((tool, i) => {
             const Icon = ICONS[tool.icon] ?? LayoutGrid;
@@ -156,7 +156,7 @@ export function ToolDrawer({
             );
           })}
           {filtered.length === 0 && (
-            <div className="col-span-2 py-8 text-center text-xs text-muted">No tools match "{query}".</div>
+            <div className="col-span-2 py-8 text-center text-xs text-muted">No tools match &quot;{query}&quot;.</div>
           )}
         </div>
       </div>

@@ -49,7 +49,7 @@ export function TryExampleButton({ category }: { category: Category }) {
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Dices className="h-3.5 w-3.5" />}
         Try an example
       </button>
-      {error && <span className="text-[11px] text-danger-text">Couldn't fetch an example — try again.</span>}
+      {error && <span className="text-[11px] text-danger-text">Couldn&apos;t fetch an example — try again.</span>}
     </div>
   );
 }

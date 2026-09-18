@@ -436,7 +436,7 @@ export function EffectsStudioView() {
 
         {exporting && source?.kind === "video" && (
           <div className="px-4 pb-2 text-[11px] text-muted">
-            Exporting plays through the clip once, then downloads a WebM file — there's no way to render faster
+            Exporting plays through the clip once, then downloads a WebM file — there&apos;s no way to render faster
             than real time without a much heavier video pipeline.
           </div>
         )}
